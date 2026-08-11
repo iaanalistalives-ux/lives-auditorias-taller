@@ -180,8 +180,14 @@ textarea{resize:vertical;min-height:56px;}
     <label>Auditora <span class="req">*</span></label>
     <select id="fAuditora"></select>
 
-    <label>Tipo de auditoría <span class="req">*</span></label>
-    <select id="fTipo"></select>
+    <div id="boxTipo">
+      <label>Tipo de auditoría <span class="req">*</span></label>
+      <select id="fTipo"></select>
+    </div>
+    <div id="boxTipoFijo" class="hidden">
+      <label>Tipo de auditoría</label>
+      <div class="derived" id="tipoFijo">—</div>
+    </div>
 
     <label>Taller <span class="req">*</span></label>
     <select id="fTaller"></select>
@@ -256,41 +262,17 @@ textarea{resize:vertical;min-height:56px;}
 
 <script>
 /* ==================================================================================
-   ███  CATÁLOGOS — REEMPLAZAR CON LAS LISTAS REALES  ███
-   Solo edita lo que está entre corchetes. No toques nada más del archivo.
+   Las auditoras, talleres, tipos y clientes YA NO se editan aquí:
+   viven en el Google Sheet, en las hojas CAT_AUDITORAS, CAT_TALLERES,
+   CAT_TIPOS y CAT_CLIENTES. Se agregan o se dan de baja desde ahí.
+   Lo único configurable en este archivo es la URL de abajo.
    ================================================================================== */
 
-// URL de la aplicación web de Apps Script (termina en /exec).
-// Déjala vacía y la app guarda solo en el celular; con la URL puesta, envía a planta.
 const APP_URL = "https://script.google.com/macros/s/AKfycbxKQ7hwNGy4qoDG75MwqRM7fD4FjW-LtRUGn6eucmorrTxSWxhKgHMOjde0vDjNvDj7/exec";
 
-const AUDITORAS = [
-  "AUDITORA 1",
-  "AUDITORA 2",
-  "AUDITORA 3"
-];
+/* ================================================================================== */
 
-const TALLERES = [
-  "YOSATEX",          // antes CHILLON — usar siempre YOSATEX
-  "TALLER 2",
-  "TALLER 3",
-  "LIVES (interno)"
-];
-
-const TIPOS = ["LÍNEAS","FINAL","EMPAQUE","CLIENTE","SERV. INSPECCIÓN"];
-
-// Prefijo de 3 letras del GRUPO -> nombre del cliente
-const CLIENTES = {
-  "EFI":"EILEEN FISHER",
-  "PAK":"PAKA",
-  "THY":"THEORY",
-  "VIN":"VINCE",
-  "PER":"PERUVIAN",
-  "QUI":"QUIMA",
-  "HEL":"HELMUT LANG"
-};
-
-/* ================== FIN DE CATÁLOGOS — abajo no hay nada que editar ================== */
+let AUDITORAS=[], TALLERES=[], TIPOS=[], CLIENTES={};
 
 const MAX_SRC=2400, DET_W=340;
 const OUT_HOJA_MAX=1600, Q_HOJA=0.82;
@@ -325,10 +307,61 @@ function fillSel(sel,arr,ph){
   arr.forEach(v=>{const x=document.createElement("option");x.value=v;x.textContent=v;sel.appendChild(x);});
   const t=document.createElement("option");t.value="__OTRO__";t.textContent="OTRO (especificar)";sel.appendChild(t);
 }
-fillSel($("fAuditora"),AUDITORAS,"— Elegir auditora —");
-fillSel($("fTaller"),TALLERES,"— Elegir taller —");
-fillSel($("fTipo"),TIPOS,"— Elegir tipo —");
 $("fFecha").value=hoyISO();
+
+/* ============ catálogos desde el Sheet ============ */
+const CK="lives_catalogos";
+function pintarCatalogos(){
+  const g=$("fAuditora").value, t=$("fTaller").value, p=$("fTipo").value;
+  fillSel($("fAuditora"),AUDITORAS,"— Elegir auditora —");
+  fillSel($("fTaller"),TALLERES,"— Elegir taller —");
+  fillSel($("fTipo"),TIPOS,"— Elegir tipo —");
+  if(g&&AUDITORAS.includes(g)) $("fAuditora").value=g;
+  if(t&&TALLERES.includes(t))  $("fTaller").value=t;
+  if(p&&TIPOS.includes(p))     $("fTipo").value=p;
+  // si el Sheet trae un solo tipo, no se pregunta: se fija y se muestra
+  const uno = TIPOS.length===1;
+  $("boxTipo").classList.toggle("hidden", uno);
+  $("boxTipoFijo").classList.toggle("hidden", !uno);
+  if(uno){ $("fTipo").value=TIPOS[0]; $("tipoFijo").textContent=TIPOS[0]; $("fTipo").classList.remove("bad"); }
+  refreshCliente();
+}
+function aplicarCatalogos(c){
+  AUDITORAS=c.auditoras||[]; TALLERES=c.talleres||[];
+  TIPOS=c.tipos||[]; CLIENTES=c.clientes||{};
+  pintarCatalogos();
+}
+function catalogosGuardados(){
+  try{ const c=JSON.parse(localStorage.getItem(CK)||"null"); if(c) aplicarCatalogos(c); return !!c; }
+  catch(e){ return false; }
+}
+async function cargarCatalogos(){
+  const hab=catalogosGuardados();
+  if(!APP_URL){
+    if(!hab) showErr("Falta configurar la URL del servidor en este archivo (APP_URL).");
+    return;
+  }
+  const k=claveEnvio();
+  if(!k){ if(!hab) showErr("Sin clave no se pueden cargar las listas. Recarga la página."); return; }
+  try{
+    const r=await fetch(APP_URL+"?accion=catalogos&clave="+encodeURIComponent(k));
+    const d=await r.json();
+    if(!d.ok){
+      if(d.error==="CLAVE_INVALIDA"){
+        localStorage.removeItem("lives_clave_envio");
+        showErr("Clave incorrecta. Recarga la página para volver a ingresarla.");
+      }
+      return;
+    }
+    localStorage.setItem(CK, JSON.stringify(d.catalogos));
+    aplicarCatalogos(d.catalogos);
+    showErr("");
+    if(!AUDITORAS.length || !TALLERES.length)
+      showErr("Las listas de auditoras o talleres están vacías en el Sheet. Avisa a Christian.");
+  }catch(e){
+    if(!hab) showErr("No hay señal y este celular todavía no tiene las listas. Conéctate una vez.");
+  }
+}
 
 function otroHandler(sel,label){
   sel.addEventListener("change",()=>{
@@ -353,13 +386,24 @@ function refreshSemana(){
 }
 $("fFecha").addEventListener("change",refreshSemana); refreshSemana();
 
+/* El prefijo se busca del más largo al más corto: así funciona con prefijos de
+   4, 3 o 2 letras sin tener que tocar el código si mañana se agrega uno distinto. */
+function clienteDe(grupo){
+  const g=(grupo||"").trim().toUpperCase();
+  for(let n=4;n>=2;n--){
+    if(g.length<n) continue;
+    const c=CLIENTES[g.slice(0,n)];
+    if(c) return {cliente:c, prefijo:g.slice(0,n)};
+  }
+  return null;
+}
 function refreshCliente(){
   const g=$("fGrupo").value.trim().toUpperCase();
   $("fGrupo").value=g;
   const el=$("fCliente");
-  if(g.length<3){el.textContent="Se calcula del grupo";el.classList.add("none");return;}
-  const c=CLIENTES[g.slice(0,3)];
-  if(c){el.textContent=c;el.classList.remove("none");}
+  if(g.length<2){el.textContent="Se calcula del grupo";el.classList.add("none");return;}
+  const r=clienteDe(g);
+  if(r){el.textContent=r.cliente;el.classList.remove("none");}
   else{el.textContent="Prefijo «"+g.slice(0,3)+"» no está en el catálogo";el.classList.add("none");}
 }
 $("fGrupo").addEventListener("input",refreshCliente);
@@ -1065,7 +1109,7 @@ function validar(){
   S.meta={
     fecha:$("fFecha").value, semana:w.sem, anio_semana:w.anio,
     auditora:$("fAuditora").value, tipo:$("fTipo").value, taller:$("fTaller").value,
-    grupo:g, cliente:CLIENTES[g.slice(0,3)]||"", estilo:$("fEstilo").value.trim().toUpperCase(),
+    grupo:g, cliente:(clienteDe(g)||{}).cliente||"", estilo:$("fEstilo").value.trim().toUpperCase(),
     color:$("fColor").value.trim().toUpperCase(),
     n_auditoria:$("fNAud").value.trim(), nota:$("fNota").value.trim(),
     recorte:S.detOk?"AUTOMATICO":"MANUAL"
@@ -1253,6 +1297,7 @@ async function renderCola(){
     box.appendChild(d);
   });
 }
+cargarCatalogos();
 renderCola().then(()=>enviarPendientes(true));
 </script>
 </body>
