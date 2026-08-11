@@ -189,8 +189,16 @@ textarea{resize:vertical;min-height:56px;}
       <div class="derived" id="tipoFijo">—</div>
     </div>
 
-    <label>Taller <span class="req">*</span></label>
-    <select id="fTaller"></select>
+    <div class="rowf">
+      <div>
+        <label>Taller <span class="req">*</span></label>
+        <select id="fTaller"></select>
+      </div>
+      <div>
+        <label>Proceso (derivado)</label>
+        <div class="derived none" id="fProceso">Se calcula del taller</div>
+      </div>
+    </div>
 
     <div class="rowf">
       <div class="cbox"><label>Grupo <span class="req">*</span></label>
@@ -270,9 +278,13 @@ textarea{resize:vertical;min-height:56px;}
 
 const APP_URL = "https://script.google.com/macros/s/AKfycbxKQ7hwNGy4qoDG75MwqRM7fD4FjW-LtRUGn6eucmorrTxSWxhKgHMOjde0vDjNvDj7/exec";
 
+/* Debe ser IGUAL a CLAVE_ENVIO del Code.gs. La auditora nunca la ve ni la escribe:
+   solo abre la app y envía. Si cambias la clave en el Sheet, cámbiala también aquí. */
+const CLAVE_ENVIO = "lives-envio-2026";
+
 /* ================================================================================== */
 
-let AUDITORAS=[], TALLERES=[], TIPOS=[], CLIENTES={};
+let AUDITORAS=[], TALLERES=[], TIPOS=[], CLIENTES={}, PROCESOS={};
 
 const MAX_SRC=2400, DET_W=340;
 const OUT_HOJA_MAX=1600, Q_HOJA=0.82;
@@ -325,10 +337,19 @@ function pintarCatalogos(){
   $("boxTipoFijo").classList.toggle("hidden", !uno);
   if(uno){ $("fTipo").value=TIPOS[0]; $("tipoFijo").textContent=TIPOS[0]; $("fTipo").classList.remove("bad"); }
   refreshCliente();
+  refreshProceso();
+}
+
+function refreshProceso(){
+  const t=$("fTaller").value, el=$("fProceso");
+  const pr=(t && t!=="__OTRO__") ? (PROCESOS[t]||"") : "";
+  if(pr){ el.textContent=pr; el.classList.remove("none"); }
+  else if(t && t!=="__OTRO__"){ el.textContent="Sin proceso en el catálogo"; el.classList.add("none"); }
+  else { el.textContent="Se calcula del taller"; el.classList.add("none"); }
 }
 function aplicarCatalogos(c){
   AUDITORAS=c.auditoras||[]; TALLERES=c.talleres||[];
-  TIPOS=c.tipos||[]; CLIENTES=c.clientes||{};
+  TIPOS=c.tipos||[]; CLIENTES=c.clientes||{}; PROCESOS=c.procesos||{};
   pintarCatalogos();
 }
 function catalogosGuardados(){
@@ -342,15 +363,12 @@ async function cargarCatalogos(){
     return;
   }
   const k=claveEnvio();
-  if(!k){ if(!hab) showErr("Sin clave no se pueden cargar las listas. Recarga la página."); return; }
   try{
     const r=await fetch(APP_URL+"?accion=catalogos&clave="+encodeURIComponent(k));
     const d=await r.json();
     if(!d.ok){
-      if(d.error==="CLAVE_INVALIDA"){
-        localStorage.removeItem("lives_clave_envio");
-        showErr("Clave incorrecta. Recarga la página para volver a ingresarla.");
-      }
+      if(d.error==="CLAVE_INVALIDA")
+        showErr("La clave de esta app no coincide con la del servidor. Avisa a Christian.");
       return;
     }
     localStorage.setItem(CK, JSON.stringify(d.catalogos));
@@ -378,6 +396,7 @@ function otroHandler(sel,label){
 }
 otroHandler($("fAuditora"),"el nombre de la auditora");
 otroHandler($("fTaller"),"el nombre del taller");
+$("fTaller").addEventListener("change",refreshProceso);
 otroHandler($("fTipo"),"el tipo de auditoría");
 
 function refreshSemana(){
@@ -1109,6 +1128,7 @@ function validar(){
   S.meta={
     fecha:$("fFecha").value, semana:w.sem, anio_semana:w.anio,
     auditora:$("fAuditora").value, tipo:$("fTipo").value, taller:$("fTaller").value,
+    proceso_taller:PROCESOS[$("fTaller").value]||"",
     grupo:g, cliente:(clienteDe(g)||{}).cliente||"", estilo:$("fEstilo").value.trim().toUpperCase(),
     color:$("fColor").value.trim().toUpperCase(),
     n_auditoria:$("fNAud").value.trim(), nota:$("fNota").value.trim(),
@@ -1146,14 +1166,7 @@ $("btnGuardar").onclick=async()=>{
 };
 
 /* ============ envío al servidor ============ */
-function claveEnvio(){
-  let k=localStorage.getItem("lives_clave_envio");
-  if(!k){
-    k=(prompt("Clave de envío (te la da Christian). Se pide una sola vez en este celular:")||"").trim();
-    if(k) localStorage.setItem("lives_clave_envio",k);
-  }
-  return k;
-}
+function claveEnvio(){ return CLAVE_ENVIO; }
 function blobB64(b){
   return new Promise((res,rej)=>{
     const r=new FileReader();
@@ -1184,7 +1197,6 @@ async function enviarUno(id){
     if(!data.ok){
       it.estado="ERROR"; it.error=data.error||"desconocido"; it.intentos=(it.intentos||0)+1;
       await dbPut(it);
-      if(data.error==="CLAVE_INVALIDA") localStorage.removeItem("lives_clave_envio");
       return {ok:false,error:data.error};
     }
     // enviada: se sueltan las fotos grandes y se conservan las miniaturas
