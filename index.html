@@ -28,6 +28,10 @@ body{background:var(--warm-light);color:#333;font-family:Calibri,Arial,sans-seri
 /* botón camarita */
 .camzone{border:2px dashed var(--warm);border-radius:10px;background:var(--warm-light);padding:26px 16px;text-align:center;cursor:pointer;}
 .camzone:active{border-color:var(--sage);}
+.camzone.drag,.evadd.drag{border-color:var(--sage);background:#E6F6EF;}
+.repbox{border-radius:6px;padding:9px 11px;font-size:12.5px;font-weight:700;margin-top:10px;}
+.repbox.n1{background:var(--warm-light);color:var(--stone);font-weight:400;font-style:italic;}
+.repbox.n2{background:#FEF3E2;color:#B45309;}
 .cambtn{width:78px;height:78px;border-radius:50%;background:var(--sage);border:none;display:inline-flex;align-items:center;justify-content:center;cursor:pointer;box-shadow:0 3px 10px rgba(15,122,90,.35);}
 .cambtn:active{background:var(--sage-dark);}
 .cambtn svg{width:36px;height:36px;fill:#fff;}
@@ -140,11 +144,13 @@ textarea{resize:vertical;min-height:56px;}
 
     <div id="hojaEmpty">
       <div class="camzone" id="camHoja">
+        <input type="file" id="fileHojaPC" accept="image/*" class="hidden">
         <button class="cambtn" type="button" id="camHojaBtn" aria-label="Tomar foto de la hoja">
           <svg viewBox="0 0 24 24"><path d="M9 3l-1.8 2H4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-3.2L15 3H9zm3 5.5a5 5 0 1 1 0 10 5 5 0 0 1 0-10zm0 2a3 3 0 1 0 0 6 3 3 0 0 0 0-6z"/></svg>
         </button>
         <div class="camlbl">Tomar foto de la hoja</div>
         <div class="camsub">Sobre una superficie que contraste con el papel</div>
+        <div class="camsub" id="pcHint" style="display:none">o arrastra la imagen aquí · también puedes pegar con Ctrl+V</div>
       </div>
     </div>
 
@@ -217,11 +223,7 @@ textarea{resize:vertical;min-height:56px;}
         <div class="cbsug" id="sugColor"></div></div>
     </div>
 
-    <div class="rowf">
-      <div><label>N° de auditoría <span class="req">*</span></label>
-        <input type="text" id="fNAud" autocomplete="off" inputmode="numeric"></div>
-      <div></div>
-    </div>
+    <div class="repbox n1" id="fRep">Completa grupo y estilo para saber si ya se auditó</div>
 
     <label>Nota (opcional)</label>
     <textarea id="fNota" placeholder="Comentario libre…"></textarea>
@@ -429,6 +431,56 @@ $("fGrupo").addEventListener("input",refreshCliente);
 $("fEstilo").addEventListener("input",e=>{e.target.value=e.target.value.toUpperCase();});
 $("fColor").addEventListener("input",e=>{e.target.value=e.target.value.toUpperCase();});
 
+/* ============ lo ya registrado en el sistema (viene del servidor) ============ */
+const SK="lives_sugerencias";
+let REG=[];                       // [[TIPO,TALLER,GRUPO,ESTILO,COLOR], ...]
+function aplicarReg(f){ REG=Array.isArray(f)?f:[]; refreshRep(); }
+async function cargarSugerencias(){
+  try{ const c=JSON.parse(localStorage.getItem(SK)||"null"); if(c) aplicarReg(c); }catch(e){}
+  if(!APP_URL) return;
+  try{
+    const r=await fetch(APP_URL+"?accion=sugerencias&clave="+encodeURIComponent(claveEnvio()));
+    const d=await r.json();
+    if(!d.ok) return;
+    localStorage.setItem(SK, JSON.stringify(d.filas||[]));
+    aplicarReg(d.filas||[]);
+  }catch(e){ /* sin señal: se usa lo guardado */ }
+}
+const norm=v=>String(v==null?"":v).trim().toUpperCase();
+
+/* Cuántas auditorías iguales ya existen (mismo tipo, taller, grupo, estilo y color). */
+function repeticionesPrevias(){
+  const t=norm($("fTipo").value), ta=norm($("fTaller").value),
+        g=norm($("fGrupo").value), e=norm($("fEstilo").value), c=norm($("fColor").value);
+  if(!g||!e||!ta||!t) return null;
+  let n=0;
+  for(const f of REG)
+    if(norm(f[0])===t && norm(f[1])===ta && norm(f[2])===g && norm(f[3])===e && norm(f[4])===c) n++;
+  // suma lo que este celular ya envió y el servidor aún no refleja
+  for(const p of PEND_LOCAL)
+    if(p.t===t&&p.ta===ta&&p.g===g&&p.e===e&&p.c===c) n++;
+  return n;
+}
+let PEND_LOCAL=[];
+function refreshRep(){
+  const el=$("fRep"), n=repeticionesPrevias();
+  if(n===null){
+    el.className="repbox n1";
+    el.textContent="Completa grupo y estilo para saber si ya se auditó";
+  } else if(n===0){
+    el.className="repbox n1";
+    el.textContent="Primera vez que se audita este lote";
+  } else {
+    el.className="repbox n2";
+    el.textContent="⚠ Ya hay "+n+" auditoría"+(n>1?"s":"")+" igual"+(n>1?"es":"")+
+                   " · esta se guardará como la "+(n+1)+".ª";
+  }
+}
+["fTipo","fTaller","fGrupo","fEstilo","fColor"].forEach(id=>{
+  $(id).addEventListener("input",refreshRep);
+  $(id).addEventListener("change",refreshRep);
+});
+
 /* ============ historial local para autocompletado ============ */
 const HK="lives_hist_campos";
 function histLeer(){ try{ return JSON.parse(localStorage.getItem(HK)||"[]"); }catch(e){ return []; } }
@@ -439,7 +491,11 @@ function histAgregar(r){
 }
 /* devuelve valores únicos ordenados: primero los del grupo actual, luego por frecuencia */
 function sugerencias(campo, texto, grupoActual){
-  const h=histLeer(), cnt=new Map(), pri=new Set();
+  const h=histLeer().slice();
+  // lo que ya está en el sistema cuenta igual que lo digitado en este celular
+  const col={g:2,e:3,c:4}[campo];
+  REG.forEach(f=>h.push({g:f[2],e:f[3],c:f[4]}));
+  const cnt=new Map(), pri=new Set();
   h.forEach(r=>{
     const v=(r[campo]||"").trim();
     if(!v) return;
@@ -499,6 +555,7 @@ window.addEventListener("scroll",()=>{
   document.querySelectorAll(".cbsug.on").forEach(b=>b.classList.remove("on"));
 },{passive:true});
 attachCombo("fGrupo","sugGrupo","g");
+cargarSugerencias();
 attachCombo("fEstilo","sugEstilo","e");
 attachCombo("fColor","sugColor","c");
 
@@ -992,15 +1049,70 @@ $("mApply").onclick=async()=>{
   spin(false);
 };
 
+/* ============ arrastrar / pegar (para cuando se usa en PC) ============ */
+const esTactil = ("ontouchstart" in window) || navigator.maxTouchPoints>0;
+if(!esTactil){
+  $("pcHint").style.display="block";
+  // en PC la cámara no aplica: abre el explorador de archivos
+  $("fileHoja").removeAttribute("capture");
+  $("fileEv").removeAttribute("capture");
+}
+function soloImagen(dt){
+  if(!dt) return null;
+  const fs=dt.files;
+  if(fs && fs.length){
+    for(const f of fs) if(f.type.startsWith("image/")) return f;
+  }
+  if(dt.items){
+    for(const it of dt.items){
+      if(it.kind==="file"){
+        const f=it.getAsFile();
+        if(f && f.type.startsWith("image/")) return f;
+      }
+    }
+  }
+  return null;
+}
+function zonaSoltar(el, onFile){
+  ["dragenter","dragover"].forEach(ev=>el.addEventListener(ev,e=>{
+    if(!e.dataTransfer) return;
+    e.preventDefault(); e.stopPropagation();
+    e.dataTransfer.dropEffect="copy";
+    el.classList.add("drag");
+  }));
+  ["dragleave","dragend"].forEach(ev=>el.addEventListener(ev,e=>{
+    e.preventDefault(); el.classList.remove("drag");
+  }));
+  el.addEventListener("drop",e=>{
+    e.preventDefault(); e.stopPropagation();
+    el.classList.remove("drag");
+    const f=soloImagen(e.dataTransfer);
+    if(f) onFile(f);
+    else showErr("Eso no es una imagen. Arrastra un archivo JPG o PNG.");
+  });
+}
+// que soltar fuera de las zonas no abra la imagen en el navegador
+["dragover","drop"].forEach(ev=>window.addEventListener(ev,e=>e.preventDefault()));
+// pegar con Ctrl+V: hoja si aún no hay, prenda si ya hay
+window.addEventListener("paste",e=>{
+  const f=soloImagen(e.clipboardData);
+  if(!f) return;
+  e.preventDefault();
+  if(!S.hoja) procesarHoja(f); else procesarEvidencia(f);
+});
+
 /* ============ flujo hoja ============ */
-$("camHoja").onclick=()=>$("fileHoja").click();
+$("camHoja").onclick=e=>{ if(e.target.id!=="fileHojaPC") $("fileHoja").click(); };
 $("btnRepetir").onclick=()=>$("fileHoja").click();
+zonaSoltar($("hojaDone"), procesarHoja);
 $("btnAjustar").onclick=()=>abrirModal("Corrige lo que haga falta y aplica");
 
 $("fileHoja").addEventListener("change",async e=>{
   const f=e.target.files&&e.target.files[0];
   e.target.value="";
-  if(!f) return;
+  if(f) procesarHoja(f);
+});
+async function procesarHoja(f){
   showErr("");
   spin(true,"Leyendo foto…");
   try{
@@ -1026,7 +1138,8 @@ $("fileHoja").addEventListener("change",async e=>{
     abrirModal(det ? "Revisa el recorte antes de aplicar"
                    : "No pude reconocer los bordes — ajústalos tú");
   }catch(err){ spin(false); showErr("No se pudo leer la foto: "+err.message); }
-});
+}
+zonaSoltar($("camHoja"), procesarHoja);
 
 async function pintarHoja(){
   const cv=enhance(S.hojaWarp,hojaMode);
@@ -1058,7 +1171,9 @@ document.querySelectorAll("#hojaDone .chip").forEach(c=>{
 $("fileEv").addEventListener("change",async e=>{
   const f=e.target.files&&e.target.files[0];
   e.target.value="";
-  if(!f) return;
+  if(f) procesarEvidencia(f);
+});
+async function procesarEvidencia(f){
   spin(true,"Procesando foto…");
   try{
     const cv=await fileToCanvas(f,OUT_EV_MAX);
@@ -1068,7 +1183,7 @@ $("fileEv").addEventListener("change",async e=>{
     renderEvs();
   }catch(err){ showErr("No se pudo procesar la foto: "+err.message); }
   spin(false);
-});
+}
 function renderEvs(){
   const g=$("evGrid"); g.innerHTML="";
   S.evs.forEach((ev,i)=>{
@@ -1084,6 +1199,7 @@ function renderEvs(){
   add.className="evadd";
   add.innerHTML='<span class="cambtn sm"><svg viewBox="0 0 24 24"><path d="M9 3l-1.8 2H4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-3.2L15 3H9zm3 5.5a5 5 0 1 1 0 10 5 5 0 0 1 0-10zm0 2a3 3 0 1 0 0 6 3 3 0 0 0 0-6z"/></svg></span><span class="t">Agregar</span>';
   add.onclick=()=>$("fileEv").click();
+  zonaSoltar(add, procesarEvidencia);
   g.appendChild(add);
   const n=S.evs.length;
   const kb=S.evs.reduce((a,e)=>a+e.blob.size,0)/1024;
@@ -1110,7 +1226,7 @@ async function dbDel(id){const d=await db();return new Promise((res,rej)=>{const
 
 function validar(){
   const req=[["fFecha","Fecha"],["fAuditora","Auditora"],["fTipo","Tipo de auditoría"],
-             ["fTaller","Taller"],["fGrupo","Grupo"],["fEstilo","Estilo"],["fNAud","N° de auditoría"]];
+             ["fTaller","Taller"],["fGrupo","Grupo"],["fEstilo","Estilo"]];
   const falta=[]; let primero=null;
   req.forEach(([id,lbl])=>{
     const el=$(id), v=(el.value||"").trim();
@@ -1131,7 +1247,7 @@ function validar(){
     proceso_taller:PROCESOS[$("fTaller").value]||"",
     grupo:g, cliente:(clienteDe(g)||{}).cliente||"", estilo:$("fEstilo").value.trim().toUpperCase(),
     color:$("fColor").value.trim().toUpperCase(),
-    n_auditoria:$("fNAud").value.trim(), nota:$("fNota").value.trim(),
+    nota:$("fNota").value.trim(),
     recorte:S.detOk?"AUTOMATICO":"MANUAL"
   };
   showErr("");
@@ -1150,6 +1266,8 @@ $("btnGuardar").onclick=async()=>{
         .concat(S.evs.map(e=>({tipo:"EVIDENCIA",desc:e.desc,blob:e.blob,thumb:e.thumb})))
     });
     histAgregar(S.meta);
+    PEND_LOCAL.push({t:norm(S.meta.tipo),ta:norm(S.meta.taller),g:norm(S.meta.grupo),
+                     e:norm(S.meta.estilo),c:norm(S.meta.color)});
     resetTodo();
     await renderCola();
   }catch(err){ spin(false); showErr("No se pudo guardar en el celular: "+err.message); return; }
@@ -1161,7 +1279,12 @@ $("btnGuardar").onclick=async()=>{
   toast("✓ Guardada · enviando a planta…");
   enviarUno(id).then(async r=>{
     await renderCola();
-    toast(r.ok ? "✓ Enviada a planta" : "Sin señal: se enviará sola cuando vuelva.");
+    if(r.ok){
+      PEND_LOCAL=[];
+      cargarSugerencias();
+      toast(r.repeticion>1 ? ("✓ Enviada · quedó como la "+r.repeticion+".ª igual")
+                           : "✓ Enviada a planta");
+    } else toast("Sin señal: se enviará sola cuando vuelva.");
   });
 };
 
@@ -1201,9 +1324,10 @@ async function enviarUno(id){
     }
     // enviada: se sueltan las fotos grandes y se conservan las miniaturas
     it.estado="ENVIADO"; it.error=""; it.enviado=new Date().toISOString();
+    it.repeticion=data.repeticion||1;
     it.fotos=it.fotos.map(f=>({tipo:f.tipo,desc:f.desc,thumb:f.thumb}));
     await dbPut(it);
-    return {ok:true};
+    return {ok:true, repeticion:data.repeticion};
   }catch(err){
     it.estado="PENDIENTE"; it.error=String(err.message||err); it.intentos=(it.intentos||0)+1;
     await dbPut(it);
@@ -1244,7 +1368,8 @@ function resetTodo(){
   $("hojaEmpty").classList.remove("hidden");
   $("hojaDone").classList.add("hidden");
   renderEvs();
-  ["fGrupo","fEstilo","fColor","fNAud","fNota"].forEach(id=>{$(id).value="";});
+  ["fGrupo","fEstilo","fColor","fNota"].forEach(id=>{$(id).value="";});
+  refreshRep();
   refreshCliente();
 }
 
@@ -1274,7 +1399,7 @@ async function renderCola(){
       ' <span class="pill'+(env?" ok":(it.estado==="ERROR"?" err":""))+'">'+
       (env?"ENVIADA":(it.estado==="ERROR"?"ERROR":"PENDIENTE"))+'</span></div>'+
       '<div class="qs">'+esc(it.meta.tipo)+' · '+esc(it.meta.taller)+' · '+esc(it.meta.auditora)+'<br>'+
-      esc(it.meta.fecha)+' · Sem '+it.meta.semana+' · N° '+esc(it.meta.n_auditoria)+
+      esc(it.meta.fecha)+' · Sem '+it.meta.semana+
       ' · '+it.fotos.length+' foto(s)'+(kb?' · '+Math.round(kb)+' KB':'')+
       (it.error?'<br><span style="color:var(--rose)">'+esc(it.error)+'</span>':'')+
       '</div><div class="qlinks"></div>';
@@ -1284,7 +1409,7 @@ async function renderCola(){
       if(!src) return;
       const a=document.createElement("a");
       a.href=URL.createObjectURL(src);
-      a.download=[it.meta.grupo,it.meta.estilo,it.meta.n_auditoria,f.tipo==="HOJA"?"HOJA":"PRENDA"+i].join("_")+".jpg";
+      a.download=[it.meta.grupo,it.meta.estilo,it.meta.color||"SC",f.tipo==="HOJA"?"HOJA":"PRENDA"+i].join("_")+".jpg";
       a.textContent=(f.tipo==="HOJA"?"Hoja":"Prenda "+i)+(f.blob?"":" (mini)");
       a.target="_blank";
       links.appendChild(a);
