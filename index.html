@@ -29,6 +29,11 @@ body{background:var(--warm-light);color:#333;font-family:Calibri,Arial,sans-seri
 .camzone{border:2px dashed var(--warm);border-radius:10px;background:var(--warm-light);padding:26px 16px;text-align:center;cursor:pointer;}
 .camzone:active{border-color:var(--sage);}
 .camzone.drag,.evadd.drag{border-color:var(--sage);background:#E6F6EF;}
+.opbox{border-radius:6px;padding:9px 11px;font-size:12.5px;margin-top:6px;}
+.opbox.ok{background:#E6F6EF;color:var(--sage);font-weight:700;}
+.opbox.no{background:#FEF3E2;color:#B45309;font-weight:700;}
+.opbox.vacio{background:var(--warm-light);color:var(--stone);font-style:italic;}
+.opbox small{display:block;font-weight:400;color:var(--stone);margin-top:2px;font-style:normal;}
 .repbox{border-radius:6px;padding:9px 11px;font-size:12.5px;font-weight:700;margin-top:10px;}
 .repbox.n1{background:var(--warm-light);color:var(--stone);font-weight:400;font-style:italic;}
 .repbox.n2{background:#FEF3E2;color:#B45309;}
@@ -206,6 +211,14 @@ textarea{resize:vertical;min-height:56px;}
       </div>
     </div>
 
+    <div class="cbox">
+      <label>OP <span class="req">*</span></label>
+      <input type="text" id="fOP" autocapitalize="characters" autocomplete="off"
+             inputmode="text" placeholder="Escribe la OP y elige de la lista">
+      <div class="cbsug" id="sugOP"></div>
+    </div>
+    <div class="opbox vacio" id="opInfo">Al elegir la OP se llenan grupo, estilo y tela</div>
+
     <div class="rowf">
       <div class="cbox"><label>Grupo <span class="req">*</span></label>
         <input type="text" id="fGrupo" autocapitalize="characters" autocomplete="off" placeholder="Ej. THY1234">
@@ -218,9 +231,17 @@ textarea{resize:vertical;min-height:56px;}
       <div class="cbox"><label>Estilo <span class="req">*</span></label>
         <input type="text" id="fEstilo" autocapitalize="characters" autocomplete="off">
         <div class="cbsug" id="sugEstilo"></div></div>
-      <div class="cbox"><label>Color</label>
-        <input type="text" id="fColor" autocapitalize="characters" autocomplete="off">
-        <div class="cbsug" id="sugColor"></div></div>
+      <div>
+        <div id="boxColorOP" class="hidden">
+          <label>Color <span class="req">*</span></label>
+          <select id="fColorSel"></select>
+        </div>
+        <div class="cbox" id="boxColorLibre">
+          <label>Color</label>
+          <input type="text" id="fColor" autocapitalize="characters" autocomplete="off">
+          <div class="cbsug" id="sugColor"></div>
+        </div>
+      </div>
     </div>
 
     <div class="repbox n1" id="fRep">Completa grupo y estilo para saber si ya se auditó</div>
@@ -431,6 +452,81 @@ $("fGrupo").addEventListener("input",refreshCliente);
 $("fEstilo").addEventListener("input",e=>{e.target.value=e.target.value.toUpperCase();});
 $("fColor").addEventListener("input",e=>{e.target.value=e.target.value.toUpperCase();});
 
+/* ============ maestro de OP (se lee del Sheet maestro, no se copia aquí) ============ */
+const OK_OPS="lives_ops";
+let OPS={};
+function aplicarOps(o){
+  OPS=o||{};
+  const n=Object.keys(OPS).length;
+  if(!n && !$("fOP").value) $("opInfo").textContent="No se pudo leer el maestro de OP · puedes llenar los datos a mano";
+  refreshOP();
+}
+async function cargarOps(){
+  try{ const c=JSON.parse(localStorage.getItem(OK_OPS)||"null"); if(c) aplicarOps(c); }catch(e){}
+  if(!APP_URL) return;
+  try{
+    const r=await fetch(APP_URL+"?accion=ops&clave="+encodeURIComponent(claveEnvio()));
+    const d=await r.json();
+    if(!d.ok) return;
+    localStorage.setItem(OK_OPS, JSON.stringify(d.ops||{}));
+    aplicarOps(d.ops||{});
+  }catch(e){ /* sin señal: se usa lo guardado */ }
+}
+
+/* Color: si la OP trae una sola opción se pone sola; si trae varias se eligen de una lista;
+   si la OP no está en el maestro, se escribe libre. Nunca se adivina. */
+function colorActual(){
+  return $("boxColorOP").classList.contains("hidden")
+    ? $("fColor").value.trim().toUpperCase()
+    : $("fColorSel").value;
+}
+function ponerColores(cols){
+  const sel=$("fColorSel"), previo=colorActual();
+  if(!cols || !cols.length){
+    $("boxColorOP").classList.add("hidden");
+    $("boxColorLibre").classList.remove("hidden");
+    return;
+  }
+  sel.innerHTML = cols.length===1 ? "" : '<option value="">— Elegir color —</option>';
+  cols.forEach(c=>{const o=document.createElement("option");o.value=c;o.textContent=c;sel.appendChild(o);});
+  if(cols.length===1) sel.value=cols[0];
+  else if(cols.includes(previo)) sel.value=previo;
+  $("boxColorOP").classList.remove("hidden");
+  $("boxColorLibre").classList.add("hidden");
+}
+function refreshOP(){
+  const op=$("fOP").value.trim().toUpperCase();
+  $("fOP").value=op;
+  const el=$("opInfo"), d=OPS[op];
+  if(!op){
+    el.className="opbox vacio";
+    el.textContent="Al elegir la OP se llenan grupo, estilo y tela";
+    ponerColores(null);
+    refreshCliente(); refreshRep();
+    return;
+  }
+  if(d){
+    $("fGrupo").value=d.g||"";
+    $("fEstilo").value=d.e||"";
+    el.className="opbox ok";
+    el.innerHTML="✓ "+esc(d.g)+" · "+esc(d.e)+
+      (d.x?'<small>Estilo cliente '+esc(d.x)+'</small>':'')+
+      (d.t?'<small>Tela '+esc(d.t)+(d.d?" — "+esc(d.d):"")+'</small>':'')+
+      (d.c&&d.c.length>1?'<small>'+d.c.length+' colores en esta OP: elige el que auditaste</small>':'');
+    ponerColores(d.c);
+    ["fGrupo","fEstilo"].forEach(i=>$(i).classList.remove("bad"));
+  } else {
+    el.className="opbox no";
+    el.innerHTML="⚠ Esa OP no está en el maestro<small>Puede ser nueva o estar mal escrita. Llena grupo, estilo y color a mano.</small>";
+    ponerColores(null);
+  }
+  refreshCliente(); refreshRep();
+}
+function opDatos(){
+  const d=OPS[$("fOP").value.trim().toUpperCase()];
+  return d?{t:d.t||"",d:d.d||"",x:d.x||""}:{t:"",d:"",x:""};
+}
+
 /* ============ lo ya registrado en el sistema (viene del servidor) ============ */
 const SK="lives_sugerencias";
 let REG=[];                       // [[TIPO,TALLER,GRUPO,ESTILO,COLOR], ...]
@@ -451,7 +547,7 @@ const norm=v=>String(v==null?"":v).trim().toUpperCase();
 /* Cuántas auditorías iguales ya existen (mismo tipo, taller, grupo, estilo y color). */
 function repeticionesPrevias(){
   const t=norm($("fTipo").value), ta=norm($("fTaller").value),
-        g=norm($("fGrupo").value), e=norm($("fEstilo").value), c=norm($("fColor").value);
+        g=norm($("fGrupo").value), e=norm($("fEstilo").value), c=norm(colorActual());
   if(!g||!e||!ta||!t) return null;
   let n=0;
   for(const f of REG)
@@ -476,10 +572,12 @@ function refreshRep(){
                    " · esta se guardará como la "+(n+1)+".ª";
   }
 }
-["fTipo","fTaller","fGrupo","fEstilo","fColor"].forEach(id=>{
+["fTipo","fTaller","fGrupo","fEstilo","fColor","fColorSel"].forEach(id=>{
   $(id).addEventListener("input",refreshRep);
   $(id).addEventListener("change",refreshRep);
 });
+$("fOP").addEventListener("input",refreshOP);
+$("fOP").addEventListener("change",refreshOP);
 
 /* ============ historial local para autocompletado ============ */
 const HK="lives_hist_campos";
@@ -554,8 +652,46 @@ document.addEventListener("pointerdown",ev=>{
 window.addEventListener("scroll",()=>{
   document.querySelectorAll(".cbsug.on").forEach(b=>b.classList.remove("on"));
 },{passive:true});
+/* Lista de OP: se filtra por lo que se escribe, mostrando grupo y estilo de cada una. */
+(function comboOP(){
+  const inp=$("fOP"), box=$("sugOP");
+  let idx=-1;
+  function lista(){
+    const q=inp.value.trim().toUpperCase();
+    const ks=Object.keys(OPS);
+    const m=(q?ks.filter(k=>k.indexOf(q)>=0):ks).sort();
+    return m.slice(0,10);
+  }
+  function pintar(){
+    const l=lista();
+    if(!l.length){ box.classList.remove("on"); box.innerHTML=""; return; }
+    const q=inp.value.trim().toUpperCase();
+    box.innerHTML=l.map((k,i)=>{
+      let t=esc(k);
+      if(q){ const p=k.indexOf(q); if(p>=0) t=esc(k.slice(0,p))+"<b>"+esc(k.slice(p,p+q.length))+"</b>"+esc(k.slice(p+q.length)); }
+      const d=OPS[k];
+      return '<div data-v="'+esc(k)+'"'+(i===idx?' class="hl"':'')+'>'+t+
+             '<span class="cnt">'+esc(d.g)+" · "+esc(d.e)+'</span></div>';
+    }).join("");
+    box.classList.add("on");
+    [...box.children].forEach(d=>d.addEventListener("mousedown",ev=>{ev.preventDefault();elegir(d.dataset.v);}));
+  }
+  function elegir(v){ inp.value=v; box.classList.remove("on"); idx=-1; refreshOP(); }
+  inp.addEventListener("focus",pintar);
+  inp.addEventListener("input",()=>{idx=-1;pintar();});
+  inp.addEventListener("blur",()=>setTimeout(()=>box.classList.remove("on"),120));
+  inp.addEventListener("keydown",ev=>{
+    if(!box.classList.contains("on")) return;
+    const n=box.children.length;
+    if(ev.key==="ArrowDown"){idx=(idx+1)%n;pintar();ev.preventDefault();}
+    else if(ev.key==="ArrowUp"){idx=(idx-1+n)%n;pintar();ev.preventDefault();}
+    else if(ev.key==="Enter"&&idx>=0){elegir(box.children[idx].dataset.v);ev.preventDefault();}
+    else if(ev.key==="Escape"){box.classList.remove("on");}
+  });
+})();
 attachCombo("fGrupo","sugGrupo","g");
 cargarSugerencias();
+cargarOps();
 attachCombo("fEstilo","sugEstilo","e");
 attachCombo("fColor","sugColor","c");
 
@@ -1226,13 +1362,19 @@ async function dbDel(id){const d=await db();return new Promise((res,rej)=>{const
 
 function validar(){
   const req=[["fFecha","Fecha"],["fAuditora","Auditora"],["fTipo","Tipo de auditoría"],
-             ["fTaller","Taller"],["fGrupo","Grupo"],["fEstilo","Estilo"]];
+             ["fTaller","Taller"],["fOP","OP"],["fGrupo","Grupo"],["fEstilo","Estilo"]];
   const falta=[]; let primero=null;
   req.forEach(([id,lbl])=>{
     const el=$(id), v=(el.value||"").trim();
     if(!v||v==="__OTRO__"){el.classList.add("bad");falta.push(lbl);if(!primero)primero=el;}
     else el.classList.remove("bad");
   });
+  // si la OP trae varios colores, elegir uno no es opcional
+  if(!$("boxColorOP").classList.contains("hidden") && !$("fColorSel").value){
+    $("fColorSel").classList.add("bad");
+    falta.push("Color");
+    if(!primero) primero=$("fColorSel");
+  } else $("fColorSel").classList.remove("bad");
   if(!S.hoja){ showErr("Falta la foto de la hoja de auditoría."); return false; }
   if(falta.length){
     showErr("Falta completar: "+falta.join(", ")+".");
@@ -1245,8 +1387,10 @@ function validar(){
     fecha:$("fFecha").value, semana:w.sem, anio_semana:w.anio,
     auditora:$("fAuditora").value, tipo:$("fTipo").value, taller:$("fTaller").value,
     proceso_taller:PROCESOS[$("fTaller").value]||"",
+    op:$("fOP").value.trim().toUpperCase(),
     grupo:g, cliente:(clienteDe(g)||{}).cliente||"", estilo:$("fEstilo").value.trim().toUpperCase(),
-    color:$("fColor").value.trim().toUpperCase(),
+    color:colorActual(), estilo_cliente:opDatos().x,
+    cod_tela:opDatos().t, desc_tela:opDatos().d,
     nota:$("fNota").value.trim(),
     recorte:S.detOk?"AUTOMATICO":"MANUAL"
   };
@@ -1268,6 +1412,7 @@ $("btnGuardar").onclick=async()=>{
     histAgregar(S.meta);
     PEND_LOCAL.push({t:norm(S.meta.tipo),ta:norm(S.meta.taller),g:norm(S.meta.grupo),
                      e:norm(S.meta.estilo),c:norm(S.meta.color)});
+    cargarOps();
     resetTodo();
     await renderCola();
   }catch(err){ spin(false); showErr("No se pudo guardar en el celular: "+err.message); return; }
@@ -1368,8 +1513,9 @@ function resetTodo(){
   $("hojaEmpty").classList.remove("hidden");
   $("hojaDone").classList.add("hidden");
   renderEvs();
-  ["fGrupo","fEstilo","fColor","fNota"].forEach(id=>{$(id).value="";});
-  refreshRep();
+  ["fOP","fGrupo","fEstilo","fColor","fNota"].forEach(id=>{$(id).value="";});
+  $("fColorSel").value="";
+  refreshOP();
   refreshCliente();
 }
 
@@ -1394,11 +1540,12 @@ async function renderCola(){
     const d=document.createElement("div");
     d.className="qitem";
     d.style.borderLeftColor = env?"var(--sage)":(it.estado==="ERROR"?"var(--rose)":"var(--tan)");
-    d.innerHTML='<div class="qt">'+esc(it.meta.grupo)+' · '+esc(it.meta.estilo)+
+    d.innerHTML='<div class="qt">'+esc(it.meta.op||it.meta.grupo)+' · '+esc(it.meta.estilo)+
       (it.meta.color?' · '+esc(it.meta.color):'')+
       ' <span class="pill'+(env?" ok":(it.estado==="ERROR"?" err":""))+'">'+
       (env?"ENVIADA":(it.estado==="ERROR"?"ERROR":"PENDIENTE"))+'</span></div>'+
-      '<div class="qs">'+esc(it.meta.tipo)+' · '+esc(it.meta.taller)+' · '+esc(it.meta.auditora)+'<br>'+
+      '<div class="qs">'+esc(it.meta.grupo)+' · '+esc(it.meta.tipo)+' · '+esc(it.meta.taller)+'<br>'+
+      esc(it.meta.auditora)+' · '+
       esc(it.meta.fecha)+' · Sem '+it.meta.semana+
       ' · '+it.fotos.length+' foto(s)'+(kb?' · '+Math.round(kb)+' KB':'')+
       (it.error?'<br><span style="color:var(--rose)">'+esc(it.error)+'</span>':'')+
