@@ -233,7 +233,7 @@ textarea{resize:vertical;min-height:56px;}
         <div class="cbsug" id="sugEstilo"></div></div>
       <div>
         <div id="boxColorOP" class="hidden">
-          <label>Color <span class="req">*</span></label>
+          <label>Estilo y color <span class="req">*</span></label>
           <select id="fColorSel"></select>
         </div>
         <div class="cbox" id="boxColorLibre">
@@ -454,77 +454,119 @@ $("fColor").addEventListener("input",e=>{e.target.value=e.target.value.toUpperCa
 
 /* ============ maestro de OP (se lee del Sheet maestro, no se copia aquí) ============ */
 const OK_OPS="lives_ops";
-let OPS={};
-function aplicarOps(o){
-  OPS=o||{};
-  const n=Object.keys(OPS).length;
-  if(!n && !$("fOP").value) $("opInfo").textContent="No se pudo leer el maestro de OP · puedes llenar los datos a mano";
+let OPS={}, TELAS={};
+/* Variante elegida: [estilo, color, estiloCliente, codTela]. La OP es la matriz;
+   la variante dice exactamente qué estilo y color se está fotografiando. */
+let VAR=null;
+
+function aplicarOps(o,t){
+  OPS=o||{}; TELAS=t||{};
   refreshOP();
 }
 async function cargarOps(){
-  try{ const c=JSON.parse(localStorage.getItem(OK_OPS)||"null"); if(c) aplicarOps(c); }catch(e){}
+  try{
+    const c=JSON.parse(localStorage.getItem(OK_OPS)||"null");
+    if(c) aplicarOps(c.ops,c.telas);
+  }catch(e){}
   if(!APP_URL) return;
   try{
     const r=await fetch(APP_URL+"?accion=ops&clave="+encodeURIComponent(claveEnvio()));
     const d=await r.json();
     if(!d.ok) return;
-    localStorage.setItem(OK_OPS, JSON.stringify(d.ops||{}));
-    aplicarOps(d.ops||{});
+    localStorage.setItem(OK_OPS, JSON.stringify({ops:d.ops||{},telas:d.telas||{}}));
+    aplicarOps(d.ops||{}, d.telas||{});
   }catch(e){ /* sin señal: se usa lo guardado */ }
 }
 
-/* Color: si la OP trae una sola opción se pone sola; si trae varias se eligen de una lista;
-   si la OP no está en el maestro, se escribe libre. Nunca se adivina. */
+const etiquetaVar = v => v[0] + (v[1] ? " · " + v[1] : "");
 function colorActual(){
-  return $("boxColorOP").classList.contains("hidden")
-    ? $("fColor").value.trim().toUpperCase()
-    : $("fColorSel").value;
+  if($("boxColorOP").classList.contains("hidden")) return $("fColor").value.trim().toUpperCase();
+  return VAR ? VAR[1] : "";
 }
-function ponerColores(cols){
-  const sel=$("fColorSel"), previo=colorActual();
-  if(!cols || !cols.length){
+function opDatos(){
+  if(!VAR) return {t:"",d:"",x:""};
+  return {t:VAR[3]||"", d:TELAS[VAR[3]]||"", x:VAR[2]||""};
+}
+
+/* Pinta la lista de variantes de la OP. Con una sola, se elige sola. */
+function ponerVariantes(vs){
+  const sel=$("fColorSel");
+  if(!vs || !vs.length){
+    VAR=null;
     $("boxColorOP").classList.add("hidden");
     $("boxColorLibre").classList.remove("hidden");
     return;
   }
-  sel.innerHTML = cols.length===1 ? "" : '<option value="">— Elegir color —</option>';
-  cols.forEach(c=>{const o=document.createElement("option");o.value=c;o.textContent=c;sel.appendChild(o);});
-  if(cols.length===1) sel.value=cols[0];
-  else if(cols.includes(previo)) sel.value=previo;
+  const previo = VAR ? etiquetaVar(VAR) : "";
+  sel.innerHTML = vs.length===1 ? "" : '<option value="">— Elegir estilo y color —</option>';
+  vs.forEach((v,i)=>{
+    const o=document.createElement("option");
+    o.value=String(i); o.textContent=etiquetaVar(v);
+    sel.appendChild(o);
+  });
+  if(vs.length===1){ sel.value="0"; VAR=vs[0]; }
+  else {
+    const i=vs.findIndex(v=>etiquetaVar(v)===previo);
+    if(i>=0){ sel.value=String(i); VAR=vs[i]; } else { sel.value=""; VAR=null; }
+  }
   $("boxColorOP").classList.remove("hidden");
   $("boxColorLibre").classList.add("hidden");
+  aplicarVariante();
 }
+function aplicarVariante(){
+  if(VAR){
+    $("fEstilo").value=VAR[0]||"";
+    $("fEstilo").classList.remove("bad");
+    $("fColorSel").classList.remove("bad");
+  }
+  pintarInfoOP();
+  refreshCliente(); refreshRep();
+}
+$("fColorSel").addEventListener("change",()=>{
+  const op=$("fOP").value.trim().toUpperCase(), d=OPS[op];
+  const i=$("fColorSel").value;
+  VAR = (d && i!=="") ? d.v[+i] : null;
+  aplicarVariante();
+});
+
+function pintarInfoOP(){
+  const op=$("fOP").value.trim().toUpperCase(), el=$("opInfo"), d=OPS[op];
+  if(!op){
+    el.className="opbox vacio";
+    el.textContent="Escribe la OP y elige de la lista";
+    return;
+  }
+  if(!d){
+    el.className="opbox no";
+    el.innerHTML="⚠ Esa OP no está en el maestro<small>Puede ser nueva o estar mal escrita. Llena grupo, estilo y color a mano.</small>";
+    return;
+  }
+  if(!VAR){
+    el.className="opbox no";
+    el.innerHTML="Elige el estilo y color que fotografiaste<small>"+d.v.length+" combinaciones en esta OP</small>";
+    return;
+  }
+  const dt=opDatos();
+  el.className="opbox ok";
+  el.innerHTML="✓ "+esc(d.g)+" · "+esc(VAR[0])+(VAR[1]?" · "+esc(VAR[1]):"")+
+    (dt.x?'<small>Estilo cliente '+esc(dt.x)+'</small>':'')+
+    (dt.t?'<small>Tela '+esc(dt.t)+(dt.d?" — "+esc(dt.d):"")+'</small>':'');
+}
+
 function refreshOP(){
   const op=$("fOP").value.trim().toUpperCase();
   $("fOP").value=op;
-  const el=$("opInfo"), d=OPS[op];
-  if(!op){
-    el.className="opbox vacio";
-    el.textContent="Al elegir la OP se llenan grupo, estilo y tela";
-    ponerColores(null);
-    refreshCliente(); refreshRep();
-    return;
-  }
+  const d=OPS[op];
   if(d){
     $("fGrupo").value=d.g||"";
-    $("fEstilo").value=d.e||"";
-    el.className="opbox ok";
-    el.innerHTML="✓ "+esc(d.g)+" · "+esc(d.e)+
-      (d.x?'<small>Estilo cliente '+esc(d.x)+'</small>':'')+
-      (d.t?'<small>Tela '+esc(d.t)+(d.d?" — "+esc(d.d):"")+'</small>':'')+
-      (d.c&&d.c.length>1?'<small>'+d.c.length+' colores en esta OP: elige el que auditaste</small>':'');
-    ponerColores(d.c);
-    ["fGrupo","fEstilo"].forEach(i=>$(i).classList.remove("bad"));
+    $("fGrupo").classList.remove("bad");
+    ponerVariantes(d.v);
   } else {
-    el.className="opbox no";
-    el.innerHTML="⚠ Esa OP no está en el maestro<small>Puede ser nueva o estar mal escrita. Llena grupo, estilo y color a mano.</small>";
-    ponerColores(null);
+    VAR=null;
+    ponerVariantes(null);
+    pintarInfoOP();
+    refreshCliente(); refreshRep();
   }
-  refreshCliente(); refreshRep();
-}
-function opDatos(){
-  const d=OPS[$("fOP").value.trim().toUpperCase()];
-  return d?{t:d.t||"",d:d.d||"",x:d.x||""}:{t:"",d:"",x:""};
 }
 
 /* ============ lo ya registrado en el sistema (viene del servidor) ============ */
@@ -547,14 +589,16 @@ const norm=v=>String(v==null?"":v).trim().toUpperCase();
 /* Cuántas auditorías iguales ya existen (mismo tipo, taller, grupo, estilo y color). */
 function repeticionesPrevias(){
   const t=norm($("fTipo").value), ta=norm($("fTaller").value),
-        g=norm($("fGrupo").value), e=norm($("fEstilo").value), c=norm(colorActual());
+        g=norm($("fGrupo").value), e=norm($("fEstilo").value), c=norm(colorActual()),
+        op=norm($("fOP").value);
   if(!g||!e||!ta||!t) return null;
   let n=0;
   for(const f of REG)
-    if(norm(f[0])===t && norm(f[1])===ta && norm(f[2])===g && norm(f[3])===e && norm(f[4])===c) n++;
+    if(norm(f[0])===t && norm(f[1])===ta && norm(f[2])===g && norm(f[3])===e
+       && norm(f[4])===c && norm(f[5]||"")===op) n++;
   // suma lo que este celular ya envió y el servidor aún no refleja
   for(const p of PEND_LOCAL)
-    if(p.t===t&&p.ta===ta&&p.g===g&&p.e===e&&p.c===c) n++;
+    if(p.t===t&&p.ta===ta&&p.g===g&&p.e===e&&p.c===c&&p.op===op) n++;
   return n;
 }
 let PEND_LOCAL=[];
@@ -670,8 +714,9 @@ window.addEventListener("scroll",()=>{
       let t=esc(k);
       if(q){ const p=k.indexOf(q); if(p>=0) t=esc(k.slice(0,p))+"<b>"+esc(k.slice(p,p+q.length))+"</b>"+esc(k.slice(p+q.length)); }
       const d=OPS[k];
+      const nv=d.v.length;
       return '<div data-v="'+esc(k)+'"'+(i===idx?' class="hl"':'')+'>'+t+
-             '<span class="cnt">'+esc(d.g)+" · "+esc(d.e)+'</span></div>';
+             '<span class="cnt">'+esc(d.g)+' · '+nv+(nv>1?" variantes":" variante")+'</span></div>';
     }).join("");
     box.classList.add("on");
     [...box.children].forEach(d=>d.addEventListener("mousedown",ev=>{ev.preventDefault();elegir(d.dataset.v);}));
@@ -1370,9 +1415,9 @@ function validar(){
     else el.classList.remove("bad");
   });
   // si la OP trae varios colores, elegir uno no es opcional
-  if(!$("boxColorOP").classList.contains("hidden") && !$("fColorSel").value){
+  if(!$("boxColorOP").classList.contains("hidden") && !VAR){
     $("fColorSel").classList.add("bad");
-    falta.push("Color");
+    falta.push("Estilo y color");
     if(!primero) primero=$("fColorSel");
   } else $("fColorSel").classList.remove("bad");
   if(!S.hoja){ showErr("Falta la foto de la hoja de auditoría."); return false; }
@@ -1411,7 +1456,7 @@ $("btnGuardar").onclick=async()=>{
     });
     histAgregar(S.meta);
     PEND_LOCAL.push({t:norm(S.meta.tipo),ta:norm(S.meta.taller),g:norm(S.meta.grupo),
-                     e:norm(S.meta.estilo),c:norm(S.meta.color)});
+                     e:norm(S.meta.estilo),c:norm(S.meta.color),op:norm(S.meta.op)});
     cargarOps();
     resetTodo();
     await renderCola();
@@ -1514,7 +1559,7 @@ function resetTodo(){
   $("hojaDone").classList.add("hidden");
   renderEvs();
   ["fOP","fGrupo","fEstilo","fColor","fNota"].forEach(id=>{$(id).value="";});
-  $("fColorSel").value="";
+  $("fColorSel").value=""; VAR=null;
   refreshOP();
   refreshCliente();
 }
@@ -1542,6 +1587,7 @@ async function renderCola(){
     d.style.borderLeftColor = env?"var(--sage)":(it.estado==="ERROR"?"var(--rose)":"var(--tan)");
     d.innerHTML='<div class="qt">'+esc(it.meta.op||it.meta.grupo)+' · '+esc(it.meta.estilo)+
       (it.meta.color?' · '+esc(it.meta.color):'')+
+      (Number(it.repeticion)>1?' <span class="pill">'+it.repeticion+'.ª</span>':'')+
       ' <span class="pill'+(env?" ok":(it.estado==="ERROR"?" err":""))+'">'+
       (env?"ENVIADA":(it.estado==="ERROR"?"ERROR":"PENDIENTE"))+'</span></div>'+
       '<div class="qs">'+esc(it.meta.grupo)+' · '+esc(it.meta.tipo)+' · '+esc(it.meta.taller)+'<br>'+
