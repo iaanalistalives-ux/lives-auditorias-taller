@@ -84,6 +84,14 @@ textarea{resize:vertical;min-height:56px;}
 .derived.none{color:var(--stone);font-weight:400;font-style:italic;font-size:13px;}
 
 /* prendas */
+.hojasgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(88px,1fr));gap:8px;margin-top:10px;}
+.hcard{position:relative;border:1px solid var(--warm);border-radius:8px;overflow:hidden;background:#fff;}
+.hcard.sel{border-color:var(--sage);box-shadow:0 0 0 2px rgba(15,122,90,.18);}
+.hcard img{width:100%;height:82px;object-fit:cover;display:block;background:var(--warm-light);}
+.hcard .n{position:absolute;left:4px;top:4px;background:rgba(14,59,54,.85);color:#fff;font-size:10px;
+  font-weight:700;border-radius:9px;padding:1px 7px;}
+.hcard .x{position:absolute;right:3px;top:3px;width:20px;height:20px;border-radius:50%;border:none;
+  background:rgba(220,38,38,.92);color:#fff;font-size:12px;font-weight:700;cursor:pointer;line-height:1;padding:0;}
 .evgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(105px,1fr));gap:9px;}
 .evcard{background:#fff;border:1px solid var(--warm);border-radius:8px;overflow:hidden;}
 .evcard img{width:100%;height:96px;object-fit:cover;display:block;background:#eee;}
@@ -162,15 +170,23 @@ textarea{resize:vertical;min-height:56px;}
     <div id="hojaDone" class="hidden">
       <div class="badge ok" id="hojaBadge">✓ Bordes detectados automáticamente</div>
       <img class="prev" id="hojaPrev" alt="Hoja de auditoría">
+      <div class="hojasgrid" id="hojasGrid"></div>
       <div class="chips">
         <button class="chip" data-mode="color" type="button">Color</button>
         <button class="chip on" data-mode="realce" type="button">Realce</button>
         <button class="chip" data-mode="bn" type="button">Alto contraste</button>
         <span style="align-self:center;font-size:11px;color:var(--stone)" id="hojaInfo"></span>
       </div>
+      <div class="camsub" style="margin-top:8px;text-align:left">
+        Si el proceso tiene varias hojas, agrégalas todas aquí: son una sola auditoría
+        y los datos se llenan una sola vez.
+      </div>
+      <div class="btnrow">
+        <button class="btn" id="btnOtraHoja" type="button">📷 Agregar otra hoja</button>
+      </div>
       <div class="btnrow">
         <button class="btn ghost" id="btnAjustar" type="button">✎ Ajustar recorte</button>
-        <button class="btn ghost" id="btnRepetir" type="button">📷 Repetir</button>
+        <button class="btn ghost" id="btnRepetir" type="button">📷 Cambiar esta hoja</button>
       </div>
     </div>
   </div>
@@ -188,8 +204,15 @@ textarea{resize:vertical;min-height:56px;}
       <div><label>Semana (ISO)</label><div class="derived" id="fSemana">—</div></div>
     </div>
 
-    <label>Auditora <span class="req">*</span></label>
-    <select id="fAuditora"></select>
+    <div id="boxAuditora">
+      <label>Auditora <span class="req">*</span></label>
+      <select id="fAuditora"></select>
+    </div>
+    <div id="boxAuditoraFija" class="hidden">
+      <label>Auditora</label>
+      <div class="derived" id="auditoraFija">—</div>
+      <button type="button" class="chip" id="btnOtraAuditora" style="margin-top:6px">No soy yo, cambiar</button>
+    </div>
 
     <div id="boxTipo">
       <label>Tipo de auditoría <span class="req">*</span></label>
@@ -314,7 +337,8 @@ const OUT_HOJA_MAX=1600, Q_HOJA=0.82;
 const OUT_EV_MAX=1800,  Q_EV=0.88;
 const THUMB=320, Q_THUMB=0.7;
 
-const S={meta:{},hoja:null,hojaWarp:null,hojaURL:null,evs:[],detOk:false};
+const S={meta:{},hojas:[],hojaWarp:null,evs:[],detOk:false};
+let hojaSel=-1;          // índice de la hoja que se está viendo/ajustando
 let enviando=false;
 let srcCv=null, corners=null, edScale=1, drag=-1, hojaMode="realce";
 
@@ -346,6 +370,29 @@ $("fFecha").value=hoyISO();
 
 /* ============ catálogos desde el Sheet ============ */
 const CK="lives_catalogos";
+/* El portal puede pasar quién ingresó: ...?auditora=FRIDA%20ESPINOZA
+   Si el nombre está en el catálogo, se fija y no se vuelve a preguntar. */
+const AUDITORA_URL = (()=>{
+  try{ return (new URLSearchParams(location.search).get("auditora")||"").trim().toUpperCase(); }
+  catch(e){ return ""; }
+})();
+let auditoraFijada=false;
+function fijarAuditora(){
+  if(!AUDITORA_URL || auditoraFijada) return;
+  const m=AUDITORAS.find(a=>a.trim().toUpperCase()===AUDITORA_URL);
+  if(!m) return;                      // nombre que no está en el catálogo: se elige a mano
+  $("fAuditora").value=m;
+  $("auditoraFija").textContent=m;
+  $("boxAuditora").classList.add("hidden");
+  $("boxAuditoraFija").classList.remove("hidden");
+  auditoraFijada=true;
+}
+$("btnOtraAuditora").onclick=()=>{
+  auditoraFijada=false;
+  $("boxAuditoraFija").classList.add("hidden");
+  $("boxAuditora").classList.remove("hidden");
+};
+
 function pintarCatalogos(){
   const g=$("fAuditora").value, t=$("fTaller").value, p=$("fTipo").value;
   fillSel($("fAuditora"),AUDITORAS,"— Elegir auditora —");
@@ -359,6 +406,7 @@ function pintarCatalogos(){
   $("boxTipo").classList.toggle("hidden", uno);
   $("boxTipoFijo").classList.toggle("hidden", !uno);
   if(uno){ $("fTipo").value=TIPOS[0]; $("tipoFijo").textContent=TIPOS[0]; $("fTipo").classList.remove("bad"); }
+  fijarAuditora();
   refreshCliente();
   refreshProceso();
 }
@@ -1279,13 +1327,14 @@ window.addEventListener("paste",e=>{
   const f=soloImagen(e.clipboardData);
   if(!f) return;
   e.preventDefault();
-  if(!S.hoja) procesarHoja(f); else procesarEvidencia(f);
+  if(!S.hojas.length){ hojaSel=-1; procesarHoja(f); } else procesarEvidencia(f);
 });
 
 /* ============ flujo hoja ============ */
-$("camHoja").onclick=e=>{ if(e.target.id!=="fileHojaPC") $("fileHoja").click(); };
-$("btnRepetir").onclick=()=>$("fileHoja").click();
-zonaSoltar($("hojaDone"), procesarHoja);
+$("camHoja").onclick=e=>{ if(e.target.id!=="fileHojaPC"){ hojaSel=-1; $("fileHoja").click(); } };
+$("btnOtraHoja").onclick=()=>{ hojaSel=-1; $("fileHoja").click(); };
+$("btnRepetir").onclick=()=>$("fileHoja").click();   // reemplaza la hoja seleccionada
+zonaSoltar($("hojaDone"), f=>{ hojaSel=-1; procesarHoja(f); });
 $("btnAjustar").onclick=()=>abrirModal("Corrige lo que haga falta y aplica");
 
 $("fileHoja").addEventListener("change",async e=>{
@@ -1322,27 +1371,65 @@ async function procesarHoja(f){
 }
 zonaSoltar($("camHoja"), procesarHoja);
 
+/* Guarda la hoja recién recortada: la agrega al final, o reemplaza la que se estaba
+   ajustando. Una auditoría puede tener varias hojas del mismo proceso. */
 async function pintarHoja(){
   const cv=enhance(S.hojaWarp,hojaMode);
   const blob=await toBlob(cv,Q_HOJA);
   const thumb=await makeThumb(cv);
-  S.hoja={blob,thumb,w:cv.width,h:cv.height};
-  if(S.hojaURL) URL.revokeObjectURL(S.hojaURL);
-  S.hojaURL=URL.createObjectURL(blob);
-  $("hojaPrev").src=S.hojaURL;
-  $("hojaInfo").textContent=cv.width+"×"+cv.height+" · "+Math.round(blob.size/1024)+" KB";
+  const item={blob,thumb,w:cv.width,h:cv.height,url:URL.createObjectURL(blob),det:S.detOk};
+  if(hojaSel>=0 && hojaSel<S.hojas.length){
+    URL.revokeObjectURL(S.hojas[hojaSel].url);
+    S.hojas[hojaSel]=item;
+  } else {
+    S.hojas.push(item);
+    hojaSel=S.hojas.length-1;
+  }
+  renderHojas();
 }
-function mostrarHoja(){
-  $("hojaEmpty").classList.add("hidden");
-  $("hojaDone").classList.remove("hidden");
+function renderHojas(){
+  const n=S.hojas.length;
+  $("hojaEmpty").classList.toggle("hidden",n>0);
+  $("hojaDone").classList.toggle("hidden",n===0);
+  if(!n){ hojaSel=-1; return; }
+  if(hojaSel<0||hojaSel>=n) hojaSel=n-1;
+  const h=S.hojas[hojaSel];
+  $("hojaPrev").src=h.url;
+  $("hojaInfo").textContent=h.w+"×"+h.h+" · "+Math.round(h.blob.size/1024)+" KB";
   const b=$("hojaBadge");
-  if(S.detOk){b.className="badge ok";b.textContent="✓ Recorte automático aplicado";}
+  if(h.det){b.className="badge ok";b.textContent="✓ Recorte automático aplicado";}
   else{b.className="badge warn";b.textContent="⚠ Recorte ajustado a mano";}
+  const g=$("hojasGrid");
+  g.innerHTML="";
+  if(n>1||true){
+    S.hojas.forEach((x,i)=>{
+      const d=document.createElement("div");
+      d.className="hcard"+(i===hojaSel?" sel":"");
+      d.innerHTML='<img src="'+x.url+'" alt="Hoja '+(i+1)+'">'+
+        '<span class="n">'+(i+1)+'</span><button class="x" type="button" title="Quitar">✕</button>';
+      d.querySelector("img").onclick=()=>{hojaSel=i;renderHojas();};
+      d.querySelector(".x").onclick=ev=>{
+        ev.stopPropagation();
+        URL.revokeObjectURL(x.url);
+        S.hojas.splice(i,1);
+        if(hojaSel>=S.hojas.length) hojaSel=S.hojas.length-1;
+        S.hojaWarp=null;
+        renderHojas();
+      };
+      g.appendChild(d);
+    });
+  }
+  const total=S.hojas.reduce((a,x)=>a+x.blob.size,0)/1024;
+  $("hojaInfo").textContent = n===1
+    ? (h.w+"×"+h.h+" · "+Math.round(h.blob.size/1024)+" KB")
+    : ("Hoja "+(hojaSel+1)+" de "+n+" · "+Math.round(total)+" KB en total");
 }
+function mostrarHoja(){ renderHojas(); }
 document.querySelectorAll("#hojaDone .chip").forEach(c=>{
   c.onclick=async()=>{
     document.querySelectorAll("#hojaDone .chip").forEach(x=>x.classList.remove("on"));
     c.classList.add("on"); hojaMode=c.dataset.mode;
+    if(!S.hojaWarp){ toast("Vuelve a tomar la hoja para cambiarle el realce"); return; }
     spin(true,"Aplicando…"); await new Promise(r=>setTimeout(r,30));
     await pintarHoja(); spin(false);
   };
@@ -1420,7 +1507,7 @@ function validar(){
     falta.push("Estilo y color");
     if(!primero) primero=$("fColorSel");
   } else $("fColorSel").classList.remove("bad");
-  if(!S.hoja){ showErr("Falta la foto de la hoja de auditoría."); return false; }
+  if(!S.hojas.length){ showErr("Falta la foto de la hoja de auditoría."); return false; }
   if(falta.length){
     showErr("Falta completar: "+falta.join(", ")+".");
     if(primero) primero.scrollIntoView({behavior:"smooth",block:"center"});
@@ -1428,8 +1515,10 @@ function validar(){
   }
   const d=parseFechaInput($("fFecha").value), w=isoWeek(d);
   const g=$("fGrupo").value.trim().toUpperCase();
+  const ahora=new Date();
+  const hh=String(ahora.getHours()).padStart(2,"0")+":"+String(ahora.getMinutes()).padStart(2,"0");
   S.meta={
-    fecha:$("fFecha").value, semana:w.sem, anio_semana:w.anio,
+    fecha:$("fFecha").value, hora:hh, semana:w.sem, anio_semana:w.anio,
     auditora:$("fAuditora").value, tipo:$("fTipo").value, taller:$("fTaller").value,
     proceso_taller:PROCESOS[$("fTaller").value]||"",
     op:$("fOP").value.trim().toUpperCase(),
@@ -1451,7 +1540,8 @@ $("btnGuardar").onclick=async()=>{
     id="AUD-"+Date.now()+"-"+Math.random().toString(36).slice(2,7).toUpperCase();
     await dbPut({
       id, creado:new Date().toISOString(), estado:"PENDIENTE", intentos:0, error:"", meta:S.meta,
-      fotos:[{tipo:"HOJA",desc:"",blob:S.hoja.blob,thumb:S.hoja.thumb}]
+      fotos:S.hojas.map((h,i)=>({tipo:"HOJA",desc:S.hojas.length>1?("Hoja "+(i+1)):"",
+                                blob:h.blob,thumb:h.thumb}))
         .concat(S.evs.map(e=>({tipo:"EVIDENCIA",desc:e.desc,blob:e.blob,thumb:e.thumb})))
     });
     histAgregar(S.meta);
@@ -1552,11 +1642,10 @@ $("btnLimpiar").onclick=async()=>{
 window.addEventListener("online",()=>enviarPendientes(true));
 
 function resetTodo(){
-  if(S.hojaURL) URL.revokeObjectURL(S.hojaURL);
+  S.hojas.forEach(h=>URL.revokeObjectURL(h.url));
   S.evs.forEach(e=>URL.revokeObjectURL(e.url));
-  S.hoja=null;S.hojaWarp=null;S.hojaURL=null;S.evs=[];srcCv=null;S.detOk=false;
-  $("hojaEmpty").classList.remove("hidden");
-  $("hojaDone").classList.add("hidden");
+  S.hojas=[];S.hojaWarp=null;S.evs=[];srcCv=null;S.detOk=false;hojaSel=-1;
+  renderHojas();
   renderEvs();
   ["fOP","fGrupo","fEstilo","fColor","fNota"].forEach(id=>{$(id).value="";});
   $("fColorSel").value=""; VAR=null;
