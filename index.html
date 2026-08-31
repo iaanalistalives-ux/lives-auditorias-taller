@@ -152,7 +152,7 @@ textarea{resize:vertical;min-height:56px;}
 
   <!-- ===== FOTO DE LA HOJA ===== -->
   <div class="panel">
-    <div class="pt">1 · Foto de la hoja</div>
+    <div class="pt" id="p1t">1 · Foto de la hoja</div>
     <div class="ph">Toma la foto completa y de frente. La app recorta y endereza sola.</div>
 
     <div id="hojaEmpty">
@@ -161,7 +161,7 @@ textarea{resize:vertical;min-height:56px;}
         <button class="cambtn" type="button" id="camHojaBtn" aria-label="Tomar foto de la hoja">
           <svg viewBox="0 0 24 24"><path d="M9 3l-1.8 2H4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-3.2L15 3H9zm3 5.5a5 5 0 1 1 0 10 5 5 0 0 1 0-10zm0 2a3 3 0 1 0 0 6 3 3 0 0 0 0-6z"/></svg>
         </button>
-        <div class="camlbl">Tomar foto de la hoja</div>
+        <div class="camlbl"><span id="camlblTxt">Tomar foto de la hoja</span></div>
         <div class="camsub">Sobre una superficie que contraste con el papel</div>
         <div class="camsub" id="pcHint" style="display:none">o arrastra la imagen aquí · también puedes pegar con Ctrl+V</div>
       </div>
@@ -406,10 +406,21 @@ function pintarCatalogos(){
   $("boxTipo").classList.toggle("hidden", uno);
   $("boxTipoFijo").classList.toggle("hidden", !uno);
   if(uno){ $("fTipo").value=TIPOS[0]; $("tipoFijo").textContent=TIPOS[0]; $("fTipo").classList.remove("bad"); }
+  refreshTitulo();
   fijarAuditora();
   refreshCliente();
   refreshProceso();
 }
+
+/* El encabezado del paso 1 nombra el documento elegido, para que nadie fotografíe
+   una cosa creyendo que registra otra. */
+function refreshTitulo(){
+  const t=$("fTipo").value;
+  $("p1t").textContent = t ? ("1 · Foto de: "+t) : "1 · Foto de la hoja";
+  const z=$("camlblTxt");
+  if(z) z.textContent = t ? ("Tomar foto de: "+t) : "Tomar foto de la hoja";
+}
+$("fTipo").addEventListener("change",refreshTitulo);
 
 function refreshProceso(){
   const t=$("fTaller").value, el=$("fProceso");
@@ -1507,7 +1518,11 @@ function validar(){
     falta.push("Estilo y color");
     if(!primero) primero=$("fColorSel");
   } else $("fColorSel").classList.remove("bad");
-  if(!S.hojas.length){ showErr("Falta la foto de la hoja de auditoría."); return false; }
+  if(!S.hojas.length){
+    const t=$("fTipo").value;
+    showErr(t ? ("Falta la foto de: "+t+".") : "Falta la foto de la hoja.");
+    return false;
+  }
   if(falta.length){
     showErr("Falta completar: "+falta.join(", ")+".");
     if(primero) primero.scrollIntoView({behavior:"smooth",block:"center"});
@@ -1649,7 +1664,10 @@ function resetTodo(){
   renderEvs();
   ["fOP","fGrupo","fEstilo","fColor","fNota"].forEach(id=>{$(id).value="";});
   $("fColorSel").value=""; VAR=null;
+  // el tipo NO se hereda de la auditoría anterior: cambia de un documento a otro
+  if(TIPOS.length>1){ $("fTipo").value=""; }
   refreshOP();
+  refreshTitulo();
   refreshCliente();
 }
 
