@@ -200,7 +200,7 @@ textarea{resize:vertical;min-height:56px;}
     <div class="ph">Fecha, semana y cliente se calculan solos.</div>
 
     <div class="rowf">
-      <div><label>Fecha <span class="req">*</span></label><input type="date" id="fFecha"></div>
+      <div><label>Fecha</label><input type="date" id="fFecha"></div>
       <div><label>Semana (ISO)</label><div class="derived" id="fSemana">—</div></div>
     </div>
 
@@ -215,7 +215,7 @@ textarea{resize:vertical;min-height:56px;}
     </div>
 
     <div id="boxTipo">
-      <label>Tipo de auditoría <span class="req">*</span></label>
+      <label>Tipo de auditoría</label>
       <select id="fTipo"></select>
     </div>
     <div id="boxTipoFijo" class="hidden">
@@ -225,7 +225,7 @@ textarea{resize:vertical;min-height:56px;}
 
     <div class="rowf">
       <div>
-        <label>Taller <span class="req">*</span></label>
+        <label>Taller</label>
         <select id="fTaller"></select>
       </div>
       <div>
@@ -235,37 +235,31 @@ textarea{resize:vertical;min-height:56px;}
     </div>
 
     <div class="cbox">
-      <label>OP <span class="req">*</span></label>
-      <input type="text" id="fOP" autocapitalize="characters" autocomplete="off"
-             inputmode="text" placeholder="Escribe la OP y elige de la lista">
+      <label>Buscar OP, grupo o estilo</label>
+      <input type="text" id="fBuscar" autocapitalize="characters" autocomplete="off"
+             placeholder="Escribe y elige de la lista">
       <div class="cbsug" id="sugOP"></div>
     </div>
-    <div class="opbox vacio" id="opInfo">Al elegir la OP se llenan grupo, estilo y tela</div>
+    <div class="opbox vacio" id="opInfo">Escribe una OP, un grupo o un estilo y elige de la lista</div>
 
     <div class="rowf">
-      <div class="cbox"><label>Grupo <span class="req">*</span></label>
-        <input type="text" id="fGrupo" autocapitalize="characters" autocomplete="off" placeholder="Ej. THY1234">
-        <div class="cbsug" id="sugGrupo"></div></div>
-      <div><label>Cliente (derivado)</label>
-        <div class="derived none" id="fCliente">Se calcula del grupo</div></div>
+      <div><label>OP</label><div class="derived none" id="vOP">—</div></div>
+      <div><label>Grupo</label><div class="derived none" id="vGrupo">—</div></div>
+    </div>
+    <div class="rowf">
+      <div><label>Estilo</label><div class="derived none" id="vEstilo">—</div></div>
+      <div><label>Color</label><div class="derived none" id="vColor">—</div></div>
+    </div>
+    <div class="rowf">
+      <div><label>Cliente</label><div class="derived none" id="fCliente">—</div></div>
+      <div><label>Estilo cliente</label><div class="derived none" id="vECli">—</div></div>
+    </div>
+    <div style="margin-top:8px">
+      <button type="button" class="chip" id="btnLimpiarSel">Limpiar selección</button>
     </div>
 
-    <div class="rowf">
-      <div class="cbox"><label>Estilo <span class="req">*</span></label>
-        <input type="text" id="fEstilo" autocapitalize="characters" autocomplete="off">
-        <div class="cbsug" id="sugEstilo"></div></div>
-      <div>
-        <div id="boxColorOP" class="hidden">
-          <label>Estilo y color <span class="req">*</span></label>
-          <select id="fColorSel"></select>
-        </div>
-        <div class="cbox" id="boxColorLibre">
-          <label>Color</label>
-          <input type="text" id="fColor" autocapitalize="characters" autocomplete="off">
-          <div class="cbsug" id="sugColor"></div>
-        </div>
-      </div>
-    </div>
+    <input type="hidden" id="fOP"><input type="hidden" id="fGrupo">
+    <input type="hidden" id="fEstilo"><input type="hidden" id="fColor">
 
     <div class="repbox n1" id="fRep">Completa grupo y estilo para saber si ya se auditó</div>
 
@@ -499,28 +493,33 @@ function clienteDe(grupo){
   return null;
 }
 function refreshCliente(){
-  const g=$("fGrupo").value.trim().toUpperCase();
-  $("fGrupo").value=g;
+  const g=($("fGrupo").value||"").trim().toUpperCase();
   const el=$("fCliente");
-  if(g.length<2){el.textContent="Se calcula del grupo";el.classList.add("none");return;}
+  if(g.length<2){el.textContent="—";el.classList.add("none");return;}
   const r=clienteDe(g);
   if(r){el.textContent=r.cliente;el.classList.remove("none");}
   else{el.textContent="Prefijo «"+g.slice(0,3)+"» no está en el catálogo";el.classList.add("none");}
 }
 $("fGrupo").addEventListener("input",refreshCliente);
-$("fEstilo").addEventListener("input",e=>{e.target.value=e.target.value.toUpperCase();});
-$("fColor").addEventListener("input",e=>{e.target.value=e.target.value.toUpperCase();});
+
 
 /* ============ maestro de OP (se lee del Sheet maestro, no se copia aquí) ============ */
 const OK_OPS="lives_ops";
-let OPS={}, TELAS={};
-/* Variante elegida: [estilo, color, estiloCliente, codTela]. La OP es la matriz;
-   la variante dice exactamente qué estilo y color se está fotografiando. */
-let VAR=null;
+let OPS={}, TELAS={}, INDICE=[];
+/* Selección actual: {op, g, e, c, x, t}. No se escribe nada a mano: todo sale del maestro. */
+let SEL=null;
 
+function construirIndice(){
+  INDICE=[];
+  for(const op in OPS){
+    const d=OPS[op];
+    (d.v||[]).forEach(v=>INDICE.push({op, g:d.g||"", e:v[0]||"", c:v[1]||"", x:v[2]||"", t:v[3]||""}));
+  }
+}
 function aplicarOps(o,t){
   OPS=o||{}; TELAS=t||{};
-  refreshOP();
+  construirIndice();
+  pintarSeleccion();
 }
 async function cargarOps(){
   try{
@@ -537,96 +536,95 @@ async function cargarOps(){
   }catch(e){ /* sin señal: se usa lo guardado */ }
 }
 
-const etiquetaVar = v => v[0] + (v[1] ? " · " + v[1] : "");
-function colorActual(){
-  if($("boxColorOP").classList.contains("hidden")) return $("fColor").value.trim().toUpperCase();
-  return VAR ? VAR[1] : "";
-}
-function opDatos(){
-  if(!VAR) return {t:"",d:"",x:""};
-  return {t:VAR[3]||"", d:TELAS[VAR[3]]||"", x:VAR[2]||""};
-}
+function colorActual(){ return SEL ? SEL.c : ""; }
+function opDatos(){ return SEL ? {t:SEL.t, d:TELAS[SEL.t]||"", x:SEL.x} : {t:"",d:"",x:""}; }
 
-/* Pinta la lista de variantes de la OP. Con una sola, se elige sola. */
-function ponerVariantes(vs){
-  const sel=$("fColorSel");
-  if(!vs || !vs.length){
-    VAR=null;
-    $("boxColorOP").classList.add("hidden");
-    $("boxColorLibre").classList.remove("hidden");
-    return;
-  }
-  const previo = VAR ? etiquetaVar(VAR) : "";
-  sel.innerHTML = vs.length===1 ? "" : '<option value="">— Elegir estilo y color —</option>';
-  vs.forEach((v,i)=>{
-    const o=document.createElement("option");
-    o.value=String(i); o.textContent=etiquetaVar(v);
-    sel.appendChild(o);
-  });
-  if(vs.length===1){ sel.value="0"; VAR=vs[0]; }
-  else {
-    const i=vs.findIndex(v=>etiquetaVar(v)===previo);
-    if(i>=0){ sel.value=String(i); VAR=vs[i]; } else { sel.value=""; VAR=null; }
-  }
-  $("boxColorOP").classList.remove("hidden");
-  $("boxColorLibre").classList.add("hidden");
-  aplicarVariante();
-}
-function aplicarVariante(){
-  if(VAR){
-    $("fEstilo").value=VAR[0]||"";
-    $("fEstilo").classList.remove("bad");
-    $("fColorSel").classList.remove("bad");
-  }
-  pintarInfoOP();
-  refreshCliente(); refreshRep();
-}
-$("fColorSel").addEventListener("change",()=>{
-  const op=$("fOP").value.trim().toUpperCase(), d=OPS[op];
-  const i=$("fColorSel").value;
-  VAR = (d && i!=="") ? d.v[+i] : null;
-  aplicarVariante();
-});
-
-function pintarInfoOP(){
-  const op=$("fOP").value.trim().toUpperCase(), el=$("opInfo"), d=OPS[op];
-  if(!op){
+/* Vuelca la selección a los campos ocultos y a lo que se ve en pantalla. */
+function pintarSeleccion(){
+  const set=(id,val)=>{
+    const el=$(id);
+    el.textContent = val || "—";
+    el.classList.toggle("none", !val);
+  };
+  $("fOP").value     = SEL ? SEL.op : "";
+  $("fGrupo").value  = SEL ? SEL.g  : "";
+  $("fEstilo").value = SEL ? SEL.e  : "";
+  $("fColor").value  = SEL ? SEL.c  : "";
+  set("vOP",     SEL ? SEL.op : "");
+  set("vGrupo",  SEL ? SEL.g  : "");
+  set("vEstilo", SEL ? SEL.e  : "");
+  set("vColor",  SEL ? SEL.c  : "");
+  set("vECli",   SEL ? SEL.x  : "");
+  const el=$("opInfo");
+  if(!SEL){
     el.className="opbox vacio";
-    el.textContent="Escribe la OP y elige de la lista";
-    return;
-  }
-  if(!d){
-    el.className="opbox no";
-    el.innerHTML="⚠ Esa OP no está en el maestro<small>Puede ser nueva o estar mal escrita. Llena grupo, estilo y color a mano.</small>";
-    return;
-  }
-  if(!VAR){
-    el.className="opbox no";
-    el.innerHTML="Elige el estilo y color que fotografiaste<small>"+d.v.length+" combinaciones en esta OP</small>";
-    return;
-  }
-  const dt=opDatos();
-  el.className="opbox ok";
-  el.innerHTML="✓ "+esc(d.g)+" · "+esc(VAR[0])+(VAR[1]?" · "+esc(VAR[1]):"")+
-    (dt.x?'<small>Estilo cliente '+esc(dt.x)+'</small>':'')+
-    (dt.t?'<small>Tela '+esc(dt.t)+(dt.d?" — "+esc(dt.d):"")+'</small>':'');
-}
-
-function refreshOP(){
-  const op=$("fOP").value.trim().toUpperCase();
-  $("fOP").value=op;
-  const d=OPS[op];
-  if(d){
-    $("fGrupo").value=d.g||"";
-    $("fGrupo").classList.remove("bad");
-    ponerVariantes(d.v);
+    el.textContent="Escribe una OP, un grupo o un estilo y elige de la lista";
   } else {
-    VAR=null;
-    ponerVariantes(null);
-    pintarInfoOP();
-    refreshCliente(); refreshRep();
+    const dt=opDatos();
+    el.className="opbox ok";
+    el.innerHTML="✓ Seleccionado"+
+      (dt.t?'<small>Tela '+esc(dt.t)+(dt.d?" — "+esc(dt.d):"")+'</small>':'');
   }
+  refreshCliente();
+  refreshRep();
 }
+$("btnLimpiarSel").onclick=()=>{ SEL=null; $("fBuscar").value=""; pintarSeleccion(); };
+
+/* Buscador: acepta OP, grupo o estilo. Solo se puede elegir de la lista;
+   lo que se escriba y no se seleccione no queda guardado en ningún lado. */
+(function buscador(){
+  const inp=$("fBuscar"), box=$("sugOP");
+  let idx=-1;
+  function lista(){
+    const q=inp.value.trim().toUpperCase();
+    if(!q) return INDICE.slice(0,12);
+    const parte=[], empieza=[];
+    for(const it of INDICE){
+      if(it.op.startsWith(q)||it.g.startsWith(q)||it.e.startsWith(q)) empieza.push(it);
+      else if(it.op.includes(q)||it.g.includes(q)||it.e.includes(q)||it.c.includes(q)) parte.push(it);
+      if(empieza.length>=12) break;
+    }
+    return empieza.concat(parte).slice(0,12);
+  }
+  function pintar(){
+    const l=lista();
+    if(!l.length){
+      box.innerHTML='<div style="color:var(--stone);font-style:italic">Sin coincidencias en el maestro</div>';
+      box.classList.add("on");
+      return;
+    }
+    box.innerHTML=l.map((it,i)=>
+      '<div data-i="'+i+'"'+(i===idx?' class="hl"':'')+'>'+
+      esc(it.op)+' · '+esc(it.e)+(it.c?' · '+esc(it.c):'')+
+      '<span class="cnt">'+esc(it.g)+'</span></div>').join("");
+    box.classList.add("on");
+    [...box.children].forEach((d,i)=>d.addEventListener("mousedown",ev=>{
+      ev.preventDefault(); elegir(l[i]);
+    }));
+  }
+  function elegir(it){
+    SEL=it;
+    inp.value=it.op+" · "+it.e+(it.c?" · "+it.c:"");
+    box.classList.remove("on"); idx=-1;
+    pintarSeleccion();
+  }
+  inp.addEventListener("focus",pintar);
+  inp.addEventListener("input",()=>{ idx=-1; if(SEL){SEL=null;pintarSeleccion();} pintar(); });
+  inp.addEventListener("blur",()=>setTimeout(()=>{
+    box.classList.remove("on");
+    // si escribió algo y no eligió, se limpia: no se admite texto libre
+    if(!SEL && inp.value.trim()) inp.value="";
+  },160));
+  inp.addEventListener("keydown",ev=>{
+    if(!box.classList.contains("on")) return;
+    const n=box.children.length;
+    if(ev.key==="ArrowDown"){idx=(idx+1)%n;pintar();ev.preventDefault();}
+    else if(ev.key==="ArrowUp"){idx=(idx-1+n)%n;pintar();ev.preventDefault();}
+    else if(ev.key==="Enter"&&idx>=0){ev.preventDefault();
+      const l=lista(); if(l[idx]) elegir(l[idx]);}
+    else if(ev.key==="Escape"){box.classList.remove("on");}
+  });
+})();
 
 /* ============ lo ya registrado en el sistema (viene del servidor) ============ */
 const SK="lives_sugerencias";
@@ -650,7 +648,7 @@ function repeticionesPrevias(){
   const t=norm($("fTipo").value), ta=norm($("fTaller").value),
         g=norm($("fGrupo").value), e=norm($("fEstilo").value), c=norm(colorActual()),
         op=norm($("fOP").value);
-  if(!g||!e||!ta||!t) return null;
+  if(!g||!e||!t) return null;      // taller puede ir vacío: no todos los tipos lo usan
   let n=0;
   for(const f of REG)
     if(norm(f[0])===t && norm(f[1])===ta && norm(f[2])===g && norm(f[3])===e
@@ -665,7 +663,7 @@ function refreshRep(){
   const el=$("fRep"), n=repeticionesPrevias();
   if(n===null){
     el.className="repbox n1";
-    el.textContent="Completa grupo y estilo para saber si ya se auditó";
+    el.textContent="Elige una OP y el tipo para saber si ya se registró";
   } else if(n===0){
     el.className="repbox n1";
     el.textContent="Primera vez que se audita este lote";
@@ -675,12 +673,9 @@ function refreshRep(){
                    " · esta se guardará como la "+(n+1)+".ª";
   }
 }
-["fTipo","fTaller","fGrupo","fEstilo","fColor","fColorSel"].forEach(id=>{
-  $(id).addEventListener("input",refreshRep);
+["fTipo","fTaller"].forEach(id=>{
   $(id).addEventListener("change",refreshRep);
 });
-$("fOP").addEventListener("input",refreshOP);
-$("fOP").addEventListener("change",refreshOP);
 
 /* ============ historial local para autocompletado ============ */
 const HK="lives_hist_campos";
@@ -712,92 +707,8 @@ function sugerencias(campo, texto, grupoActual){
   });
   return arr.slice(0,8).map(([v,n])=>({v,n,pri:pri.has(v)}));
 }
-function attachCombo(inputId, sugId, campo){
-  const inp=$(inputId), box=$(sugId);
-  let idx=-1;
-  function pintar(){
-    const lista=sugerencias(campo, inp.value, campo==="g"?null:$("fGrupo").value.trim().toUpperCase());
-    if(!lista.length){ box.classList.remove("on"); box.innerHTML=""; return; }
-    const q=inp.value.trim().toUpperCase();
-    box.innerHTML=lista.map((s,i)=>{
-      let txt=esc(s.v);
-      if(q){ const k=s.v.indexOf(q); if(k>=0) txt=esc(s.v.slice(0,k))+"<b>"+esc(s.v.slice(k,k+q.length))+"</b>"+esc(s.v.slice(k+q.length)); }
-      return '<div data-v="'+esc(s.v)+'"'+(i===idx?' class="hl"':'')+'>'+txt+
-             '<span class="cnt">'+(s.pri?"· de este grupo":s.n+"×")+'</span></div>';
-    }).join("");
-    box.classList.add("on");
-    [...box.children].forEach(d=>{
-      d.addEventListener("mousedown",ev=>{ev.preventDefault();elegir(d.dataset.v);});
-    });
-  }
-  function elegir(v){
-    inp.value=v; box.classList.remove("on"); idx=-1;
-    inp.dispatchEvent(new Event("input",{bubbles:true}));
-    inp.classList.remove("bad");
-  }
-  inp.addEventListener("focus",pintar);
-  inp.addEventListener("input",()=>{idx=-1;pintar();});
-  inp.addEventListener("blur",()=>setTimeout(()=>box.classList.remove("on"),120));
-  inp.addEventListener("keydown",ev=>{
-    if(!box.classList.contains("on")) return;
-    const n=box.children.length;
-    if(ev.key==="ArrowDown"){idx=(idx+1)%n;pintar();ev.preventDefault();}
-    else if(ev.key==="ArrowUp"){idx=(idx-1+n)%n;pintar();ev.preventDefault();}
-    else if(ev.key==="Enter"&&idx>=0){elegir(box.children[idx].dataset.v);ev.preventDefault();}
-    else if(ev.key==="Escape"){box.classList.remove("on");}
-  });
-}
-// cerrar cualquier lista al tocar fuera o al hacer scroll
-document.addEventListener("pointerdown",ev=>{
-  if(!ev.target.closest(".cbox"))
-    document.querySelectorAll(".cbsug.on").forEach(b=>b.classList.remove("on"));
-},true);
-window.addEventListener("scroll",()=>{
-  document.querySelectorAll(".cbsug.on").forEach(b=>b.classList.remove("on"));
-},{passive:true});
-/* Lista de OP: se filtra por lo que se escribe, mostrando grupo y estilo de cada una. */
-(function comboOP(){
-  const inp=$("fOP"), box=$("sugOP");
-  let idx=-1;
-  function lista(){
-    const q=inp.value.trim().toUpperCase();
-    const ks=Object.keys(OPS);
-    const m=(q?ks.filter(k=>k.indexOf(q)>=0):ks).sort();
-    return m.slice(0,10);
-  }
-  function pintar(){
-    const l=lista();
-    if(!l.length){ box.classList.remove("on"); box.innerHTML=""; return; }
-    const q=inp.value.trim().toUpperCase();
-    box.innerHTML=l.map((k,i)=>{
-      let t=esc(k);
-      if(q){ const p=k.indexOf(q); if(p>=0) t=esc(k.slice(0,p))+"<b>"+esc(k.slice(p,p+q.length))+"</b>"+esc(k.slice(p+q.length)); }
-      const d=OPS[k];
-      const nv=d.v.length;
-      return '<div data-v="'+esc(k)+'"'+(i===idx?' class="hl"':'')+'>'+t+
-             '<span class="cnt">'+esc(d.g)+' · '+nv+(nv>1?" variantes":" variante")+'</span></div>';
-    }).join("");
-    box.classList.add("on");
-    [...box.children].forEach(d=>d.addEventListener("mousedown",ev=>{ev.preventDefault();elegir(d.dataset.v);}));
-  }
-  function elegir(v){ inp.value=v; box.classList.remove("on"); idx=-1; refreshOP(); }
-  inp.addEventListener("focus",pintar);
-  inp.addEventListener("input",()=>{idx=-1;pintar();});
-  inp.addEventListener("blur",()=>setTimeout(()=>box.classList.remove("on"),120));
-  inp.addEventListener("keydown",ev=>{
-    if(!box.classList.contains("on")) return;
-    const n=box.children.length;
-    if(ev.key==="ArrowDown"){idx=(idx+1)%n;pintar();ev.preventDefault();}
-    else if(ev.key==="ArrowUp"){idx=(idx-1+n)%n;pintar();ev.preventDefault();}
-    else if(ev.key==="Enter"&&idx>=0){elegir(box.children[idx].dataset.v);ev.preventDefault();}
-    else if(ev.key==="Escape"){box.classList.remove("on");}
-  });
-})();
-attachCombo("fGrupo","sugGrupo","g");
 cargarSugerencias();
 cargarOps();
-attachCombo("fEstilo","sugEstilo","e");
-attachCombo("fColor","sugColor","c");
 
 /* ============ imagen ============ */
 async function fileToCanvas(file,maxDim){
@@ -1504,23 +1415,15 @@ async function dbAll(){const d=await db();return new Promise((res,rej)=>{const t
 async function dbDel(id){const d=await db();return new Promise((res,rej)=>{const t=d.transaction("cola","readwrite");t.objectStore("cola").delete(id);t.oncomplete=res;t.onerror=()=>rej(t.error);});}
 
 function validar(){
-  const req=[["fFecha","Fecha"],["fAuditora","Auditora"],["fTipo","Tipo de auditoría"],
-             ["fTaller","Taller"],["fOP","OP"],["fGrupo","Grupo"],["fEstilo","Estilo"]];
+  // Solo la auditora es obligatoria. El resto se guarda con lo que se haya seleccionado.
   const falta=[]; let primero=null;
-  req.forEach(([id,lbl])=>{
-    const el=$(id), v=(el.value||"").trim();
-    if(!v||v==="__OTRO__"){el.classList.add("bad");falta.push(lbl);if(!primero)primero=el;}
-    else el.classList.remove("bad");
-  });
-  // si la OP trae varios colores, elegir uno no es opcional
-  if(!$("boxColorOP").classList.contains("hidden") && !VAR){
-    $("fColorSel").classList.add("bad");
-    falta.push("Estilo y color");
-    if(!primero) primero=$("fColorSel");
-  } else $("fColorSel").classList.remove("bad");
+  const a=$("fAuditora");
+  if(!(a.value||"").trim() || a.value==="__OTRO__"){
+    a.classList.add("bad"); falta.push("Auditora"); primero=a;
+  } else a.classList.remove("bad");
   if(!S.hojas.length){
     const t=$("fTipo").value;
-    showErr(t ? ("Falta la foto de: "+t+".") : "Falta la foto de la hoja.");
+    showErr(t ? ("Falta la foto de: "+t+".") : "Falta la foto del documento.");
     return false;
   }
   if(falta.length){
@@ -1662,13 +1565,12 @@ function resetTodo(){
   S.hojas=[];S.hojaWarp=null;S.evs=[];srcCv=null;S.detOk=false;hojaSel=-1;
   renderHojas();
   renderEvs();
-  ["fOP","fGrupo","fEstilo","fColor","fNota"].forEach(id=>{$(id).value="";});
-  $("fColorSel").value=""; VAR=null;
+  $("fNota").value="";
+  SEL=null; $("fBuscar").value="";
   // el tipo NO se hereda de la auditoría anterior: cambia de un documento a otro
   if(TIPOS.length>1){ $("fTipo").value=""; }
-  refreshOP();
+  pintarSeleccion();
   refreshTitulo();
-  refreshCliente();
 }
 
 async function renderCola(){
@@ -1692,12 +1594,15 @@ async function renderCola(){
     const d=document.createElement("div");
     d.className="qitem";
     d.style.borderLeftColor = env?"var(--sage)":(it.estado==="ERROR"?"var(--rose)":"var(--tan)");
-    d.innerHTML='<div class="qt">'+esc(it.meta.op||it.meta.grupo)+' · '+esc(it.meta.estilo)+
-      (it.meta.color?' · '+esc(it.meta.color):'')+
+    const titulo=[it.meta.op||it.meta.grupo, it.meta.estilo, it.meta.color]
+                 .filter(x=>x&&String(x).trim()).join(' · ')
+                 || (it.meta.tipo || 'Sin identificar');
+    d.innerHTML='<div class="qt">'+esc(titulo)+
       (Number(it.repeticion)>1?' <span class="pill">'+it.repeticion+'.ª</span>':'')+
       ' <span class="pill'+(env?" ok":(it.estado==="ERROR"?" err":""))+'">'+
       (env?"ENVIADA":(it.estado==="ERROR"?"ERROR":"PENDIENTE"))+'</span></div>'+
-      '<div class="qs">'+esc(it.meta.grupo)+' · '+esc(it.meta.tipo)+' · '+esc(it.meta.taller)+'<br>'+
+      '<div class="qs">'+[it.meta.grupo,it.meta.tipo,it.meta.taller]
+        .filter(x=>x&&String(x).trim()).map(esc).join(' · ')+'<br>'+
       esc(it.meta.auditora)+' · '+
       esc(it.meta.fecha)+' · Sem '+it.meta.semana+
       ' · '+it.fotos.length+' foto(s)'+(kb?' · '+Math.round(kb)+' KB':'')+
