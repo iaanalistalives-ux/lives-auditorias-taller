@@ -43,6 +43,12 @@ body{background:var(--warm-light);color:#333;font-family:Calibri,Arial,sans-seri
 .cambtn.sm{width:54px;height:54px;box-shadow:none;}
 .cambtn.sm svg{width:25px;height:25px;}
 .camlbl{font-size:13px;font-weight:700;color:var(--sage);margin-top:10px;}
+.camdos{display:flex;gap:10px;justify-content:center;align-items:center;flex-wrap:wrap;}
+.camopt{display:flex;flex-direction:column;align-items:center;gap:6px;cursor:pointer;padding:6px 10px;border-radius:10px;}
+.camopt:active{background:rgba(15,122,90,.08);}
+.camopt .t{font-size:12px;font-weight:700;color:var(--sage);}
+.cambtn.gal{background:#fff;border:2px solid var(--sage);}
+.cambtn.gal svg{fill:var(--sage);}
 .camsub{font-size:11.5px;color:var(--stone);margin-top:3px;}
 
 .badge{display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:700;border-radius:12px;padding:4px 11px;margin-bottom:10px;}
@@ -157,10 +163,20 @@ textarea{resize:vertical;min-height:56px;}
 
     <div id="hojaEmpty">
       <div class="camzone" id="camHoja">
-        <input type="file" id="fileHojaPC" accept="image/*" class="hidden">
-        <button class="cambtn" type="button" id="camHojaBtn" aria-label="Tomar foto de la hoja">
-          <svg viewBox="0 0 24 24"><path d="M9 3l-1.8 2H4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-3.2L15 3H9zm3 5.5a5 5 0 1 1 0 10 5 5 0 0 1 0-10zm0 2a3 3 0 1 0 0 6 3 3 0 0 0 0-6z"/></svg>
-        </button>
+        <div class="camdos">
+          <div class="camopt" id="optCamara">
+            <span class="cambtn" aria-label="Tomar foto con la cámara">
+              <svg viewBox="0 0 24 24"><path d="M9 3l-1.8 2H4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-3.2L15 3H9zm3 5.5a5 5 0 1 1 0 10 5 5 0 0 1 0-10zm0 2a3 3 0 1 0 0 6 3 3 0 0 0 0-6z"/></svg>
+            </span>
+            <span class="t">Tomar foto</span>
+          </div>
+          <div class="camopt" id="optGaleria">
+            <span class="cambtn gal" aria-label="Elegir una foto del celular">
+              <svg viewBox="0 0 24 24"><path d="M21 19V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2zM8.5 13.5l2.5 3 3.5-4.5 4.5 6H5l3.5-4.5z"/></svg>
+            </span>
+            <span class="t">Elegir del celular</span>
+          </div>
+        </div>
         <div class="camlbl"><span id="camlblTxt">Tomar foto de la hoja</span></div>
         <div class="camsub">Sobre una superficie que contraste con el papel</div>
         <div class="camsub" id="pcHint" style="display:none">o arrastra la imagen aquí · también puedes pegar con Ctrl+V</div>
@@ -182,7 +198,8 @@ textarea{resize:vertical;min-height:56px;}
         y los datos se llenan una sola vez.
       </div>
       <div class="btnrow">
-        <button class="btn" id="btnOtraHoja" type="button">📷 Agregar otra hoja</button>
+        <button class="btn" id="btnOtraHoja" type="button">📷 Otra hoja</button>
+        <button class="btn ghost" id="btnOtraHojaGal" type="button">🖼 Del celular</button>
       </div>
       <div class="btnrow">
         <button class="btn ghost" id="btnAjustar" type="button">✎ Ajustar recorte</button>
@@ -307,6 +324,8 @@ textarea{resize:vertical;min-height:56px;}
 
 <input type="file" id="fileHoja" accept="image/*" capture="environment" class="hidden">
 <input type="file" id="fileEv" accept="image/*" capture="environment" class="hidden">
+<input type="file" id="fileHojaGal" accept="image/*" class="hidden">
+<input type="file" id="fileEvGal" accept="image/*" class="hidden">
 
 <script>
 /* ==================================================================================
@@ -1207,6 +1226,8 @@ if(!esTactil){
   // en PC la cámara no aplica: abre el explorador de archivos
   $("fileHoja").removeAttribute("capture");
   $("fileEv").removeAttribute("capture");
+  $("optGaleria").style.display="none";
+  $("btnOtraHojaGal").style.display="none";
 }
 function soloImagen(dt){
   if(!dt) return null;
@@ -1253,8 +1274,20 @@ window.addEventListener("paste",e=>{
 });
 
 /* ============ flujo hoja ============ */
-$("camHoja").onclick=e=>{ if(e.target.id!=="fileHojaPC"){ hojaSel=-1; $("fileHoja").click(); } };
+/* Dos caminos para la misma foto: abrir la cámara, o elegir una que ya está guardada
+   en el celular (la tomaron antes, o se la pasaron). */
+$("optCamara").onclick=()=>{ hojaSel=-1; $("fileHoja").click(); };
+$("optGaleria").onclick=()=>{ hojaSel=-1; $("fileHojaGal").click(); };
 $("btnOtraHoja").onclick=()=>{ hojaSel=-1; $("fileHoja").click(); };
+$("btnOtraHojaGal").onclick=()=>{ hojaSel=-1; $("fileHojaGal").click(); };
+$("fileHojaGal").addEventListener("change",e=>{
+  const f=e.target.files&&e.target.files[0]; e.target.value="";
+  if(f) procesarHoja(f);
+});
+$("fileEvGal").addEventListener("change",e=>{
+  const f=e.target.files&&e.target.files[0]; e.target.value="";
+  if(f) procesarEvidencia(f);
+});
 $("btnRepetir").onclick=()=>$("fileHoja").click();   // reemplaza la hoja seleccionada
 zonaSoltar($("hojaDone"), f=>{ hojaSel=-1; procesarHoja(f); });
 $("btnAjustar").onclick=()=>abrirModal("Corrige lo que haga falta y aplica");
@@ -1387,10 +1420,17 @@ function renderEvs(){
   });
   const add=document.createElement("div");
   add.className="evadd";
-  add.innerHTML='<span class="cambtn sm"><svg viewBox="0 0 24 24"><path d="M9 3l-1.8 2H4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-3.2L15 3H9zm3 5.5a5 5 0 1 1 0 10 5 5 0 0 1 0-10zm0 2a3 3 0 1 0 0 6 3 3 0 0 0 0-6z"/></svg></span><span class="t">Agregar</span>';
+  add.innerHTML='<span class="cambtn sm"><svg viewBox="0 0 24 24"><path d="M9 3l-1.8 2H4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-3.2L15 3H9zm3 5.5a5 5 0 1 1 0 10 5 5 0 0 1 0-10zm0 2a3 3 0 1 0 0 6 3 3 0 0 0 0-6z"/></svg></span><span class="t">Tomar foto</span>';
   add.onclick=()=>$("fileEv").click();
   zonaSoltar(add, procesarEvidencia);
   g.appendChild(add);
+  if(esTactil){
+    const addG=document.createElement("div");
+    addG.className="evadd";
+    addG.innerHTML='<span class="cambtn sm gal"><svg viewBox="0 0 24 24"><path d="M21 19V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2zM8.5 13.5l2.5 3 3.5-4.5 4.5 6H5l3.5-4.5z"/></svg></span><span class="t">Del celular</span>';
+    addG.onclick=()=>$("fileEvGal").click();
+    g.appendChild(addG);
+  }
   const n=S.evs.length;
   const kb=S.evs.reduce((a,e)=>a+e.blob.size,0)/1024;
   $("evInfo").textContent = n===0
