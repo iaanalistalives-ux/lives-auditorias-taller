@@ -194,7 +194,7 @@ textarea{resize:vertical;min-height:56px;}
         <span style="align-self:center;font-size:11px;color:var(--stone)" id="hojaInfo"></span>
       </div>
       <div class="camsub" style="margin-top:8px;text-align:left">
-        Si el proceso tiene varias hojas, agrégalas todas aquí: son una sola auditoría
+        Si el proceso tiene varias hojas, agrégalas todas aquí: son un solo envío
         y los datos se llenan una sola vez.
       </div>
       <div class="btnrow">
@@ -213,7 +213,7 @@ textarea{resize:vertical;min-height:56px;}
        este bloque se reemplaza por un buscador de OC que rellena GRUPO / ESTILO /
        CLIENTE / N° DE AUDITORÍA automáticamente. El resto de la app no cambia. -->
   <div class="panel">
-    <div class="pt">2 · Datos de la auditoría</div>
+    <div class="pt">2 · Datos del registro</div>
     <div class="ph">Fecha, semana y cliente se calculan solos.</div>
 
     <div class="rowf">
@@ -232,7 +232,7 @@ textarea{resize:vertical;min-height:56px;}
     </div>
 
     <div id="boxTipo">
-      <label>Tipo de auditoría</label>
+      <label>Tipo de documento</label>
       <select id="fTipo"></select>
     </div>
     <div id="boxTipoFijo" class="hidden">
@@ -303,7 +303,7 @@ textarea{resize:vertical;min-height:56px;}
   </div>
 </div>
 
-<div class="savebar"><button class="btn" id="btnGuardar" type="button">↑ Enviar auditoría</button></div>
+<div class="savebar"><button class="btn" id="btnGuardar" type="button">↑ Enviar</button></div>
 
 <!-- ===== MODAL EDITOR ===== -->
 <div class="modal" id="modal">
@@ -492,7 +492,7 @@ function otroHandler(sel,label){
 otroHandler($("fAuditora"),"el nombre de la auditora");
 otroHandler($("fTaller"),"el nombre del taller");
 $("fTaller").addEventListener("change",refreshProceso);
-otroHandler($("fTipo"),"el tipo de auditoría");
+otroHandler($("fTipo"),"el tipo de documento");
 
 function refreshSemana(){
   const d=parseFechaInput($("fFecha").value);
@@ -685,11 +685,11 @@ function refreshRep(){
     el.textContent="Elige una OP y el tipo para saber si ya se registró";
   } else if(n===0){
     el.className="repbox n1";
-    el.textContent="Primera vez que se audita este lote";
+    el.textContent="Primera vez que se registra esto";
   } else {
     el.className="repbox n2";
-    el.textContent="⚠ Ya hay "+n+" auditoría"+(n>1?"s":"")+" igual"+(n>1?"es":"")+
-                   " · esta se guardará como la "+(n+1)+".ª";
+    el.textContent="⚠ Ya hay "+n+" registro"+(n>1?"s":"")+" igual"+(n>1?"es":"")+
+                   " · este se guardará como el "+(n+1)+".º";
   }
 }
 ["fTipo","fTaller"].forEach(id=>{
@@ -1512,16 +1512,16 @@ $("btnGuardar").onclick=async()=>{
 
   spin(false);
   window.scrollTo({top:0,behavior:"smooth"});
-  if(!APP_URL){ toast("✓ Guardada en el celular (envío no configurado)"); return; }
+  if(!APP_URL){ toast("✓ Guardado en el celular (envío no configurado)"); return; }
   // el envío va en segundo plano: la auditora puede empezar la siguiente de inmediato
-  toast("✓ Guardada · enviando a planta…");
+  toast("✓ Guardado · enviando a planta…");
   enviarUno(id).then(async r=>{
     await renderCola();
     if(r.ok){
       PEND_LOCAL=[];
       cargarSugerencias();
-      toast(r.repeticion>1 ? ("✓ Enviada · quedó como la "+r.repeticion+".ª igual")
-                           : "✓ Enviada a planta");
+      toast(r.repeticion>1 ? ("✓ Enviado · quedó como el "+r.repeticion+".º igual")
+                           : "✓ Enviado a planta");
     } else toast("Sin señal: se enviará sola cuando vuelva.");
   });
 };
@@ -1586,14 +1586,14 @@ async function enviarPendientes(silencioso){
     }
     await renderCola();
     if(!silencioso){ spin(false); toast(ok+" de "+items.length+" enviadas"); }
-    else if(ok) toast(ok+" auditoría(s) enviadas");
+    else if(ok) toast(ok+" envío(s) completados");
   } finally { enviando=false; spin(false); }
 }
 $("btnReintentar").onclick=()=>enviarPendientes(false);
 $("btnLimpiar").onclick=async()=>{
   const items=(await dbAll()).filter(x=>x.estado==="ENVIADO");
   if(!items.length){ toast("No hay enviadas que limpiar"); return; }
-  if(!confirm("Quitar "+items.length+" auditoría(s) ya enviadas de este celular?\nSiguen en planta.")) return;
+  if(!confirm("Quitar "+items.length+" envío(s) de este celular?\nSiguen guardados en planta.")) return;
   for(const it of items) await dbDel(it.id);
   await renderCola(); toast("Listo");
 };
@@ -1626,7 +1626,7 @@ async function renderCola(){
     : (pend? pend+" pendiente(s) de envío · se reintenta solo al recuperar señal"
            : "Todo enviado a planta.");
   $("qActions").style.display = APP_URL ? "flex" : "none";
-  if(!items.length){ $("qList").innerHTML='<div class="empty">Todavía no hay auditorías.</div>'; return; }
+  if(!items.length){ $("qList").innerHTML='<div class="empty">Todavía no hay envíos.</div>'; return; }
   const box=$("qList"); box.innerHTML="";
   items.forEach(it=>{
     const env=it.estado==="ENVIADO";
@@ -1638,9 +1638,9 @@ async function renderCola(){
                  .filter(x=>x&&String(x).trim()).join(' · ')
                  || (it.meta.tipo || 'Sin identificar');
     d.innerHTML='<div class="qt">'+esc(titulo)+
-      (Number(it.repeticion)>1?' <span class="pill">'+it.repeticion+'.ª</span>':'')+
+      (Number(it.repeticion)>1?' <span class="pill">'+it.repeticion+'.º</span>':'')+
       ' <span class="pill'+(env?" ok":(it.estado==="ERROR"?" err":""))+'">'+
-      (env?"ENVIADA":(it.estado==="ERROR"?"ERROR":"PENDIENTE"))+'</span></div>'+
+      (env?"ENVIADO":(it.estado==="ERROR"?"ERROR":"PENDIENTE"))+'</span></div>'+
       '<div class="qs">'+[it.meta.grupo,it.meta.tipo,it.meta.taller]
         .filter(x=>x&&String(x).trim()).map(esc).join(' · ')+'<br>'+
       esc(it.meta.auditora)+' · '+
@@ -1671,8 +1671,8 @@ async function renderCola(){
     del.style.color="#DC2626"; del.style.borderColor="#DC2626";
     del.onclick=async ev=>{
       ev.preventDefault();
-      const txt=env?"Quitar esta auditoría de este celular? Sigue guardada en planta."
-                   :"Borrar esta auditoría? TODAVÍA NO se ha enviado: se pierde.";
+      const txt=env?"Quitar este envío de este celular? Sigue guardado en planta."
+                   :"Borrar esto? TODAVÍA NO se ha enviado: se pierde.";
       if(confirm(txt)){await dbDel(it.id);renderCola();toast("Borrada");}
     };
     links.appendChild(del);
