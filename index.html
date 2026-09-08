@@ -1245,9 +1245,9 @@ function renderBloques(){
         '<img class="prev vista" src="'+h.url+'" alt="Foto">'+
         '<div class="hojasgrid mini"></div>'+
         '<div class="binfo">'+(n===1 ? (h.w+'×'+h.h+' · '+Math.round(h.blob.size/1024)+' KB')
-                                     : ('Foto '+((hojaSel<0?n:hojaSel+1))+' de '+n+' · '+Math.round(kb)+' KB en total'))+'</div>'+
+                                     : ('Página '+((hojaSel<0?n:hojaSel+1))+' de '+n+' · '+Math.round(kb)+' KB en total'))+'</div>'+
         '<div class="camsub" style="text-align:left;margin-top:6px">¿Se ve de costado? Toca <b>↻ Girar</b>.</div>'+
-        '<div class="btnrow"><button class="btn bMas" type="button">📷 Otra foto</button>'+
+        '<div class="btnrow"><button class="btn bMas" type="button">📷 Agregar página</button>'+
         (esTactil?'<button class="btn ghost bMasGal" type="button">🖼 Del celular</button>':'')+'</div>'+
         '<div class="btnrow"><button class="btn ghost bGirar" type="button">↻ Girar</button>'+
         '<button class="btn ghost bAjustar" type="button">✎ Recorte</button>'+
@@ -1505,9 +1505,11 @@ $("btnGuardar").onclick=async()=>{
       });
       await dbPut({
         id, creado:new Date().toISOString(), estado:"PENDIENTE", intentos:0, error:"", meta,
-        fotos:b.hojas.map((h,i)=>({tipo:"HOJA", desc:b.hojas.length>1?("Hoja "+(i+1)):"",
+        fotos:b.hojas.map((h,i)=>({tipo:"HOJA",
+                                   desc:b.hojas.length>1?("Página "+(i+1)+" de "+b.hojas.length):"",
                                    blob:h.blob, thumb:h.thumb}))
-              .concat(b.evs.map((e,i)=>({tipo:"EVIDENCIA", desc:"Prenda "+(i+1),
+              .concat(b.evs.map((e,i)=>({tipo:"EVIDENCIA",
+                                         desc:b.evs.length>1?("Prenda "+(i+1)+" de "+b.evs.length):"Prenda",
                                          blob:e.blob, thumb:e.thumb})))
       });
       histAgregar(meta);
