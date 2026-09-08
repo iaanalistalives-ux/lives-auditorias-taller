@@ -274,6 +274,8 @@ textarea{resize:vertical;min-height:56px;}
 
 <input type="file" id="fileHoja" accept="image/*" capture="environment" class="hidden">
 <input type="file" id="fileHojaGal" accept="image/*" class="hidden">
+<input type="file" id="filePrenda" accept="image/*" capture="environment" class="hidden">
+<input type="file" id="filePrendaGal" accept="image/*" class="hidden">
 
 <script>
 /* ==================================================================================
@@ -1199,13 +1201,17 @@ function zonaSoltar(el, onFile){
 }
 /* ============ bloques de proceso ============ */
 const hojasDe = b => (S.bloques[b] ? S.bloques[b].hojas : []);
+/* Si el proceso es de evidencia de prendas, las fotos NO se enderezan:
+   una prenda no es un rectángulo y corregirle la perspectiva la deforma. */
+const esDePrendas = t => /PRENDA/i.test(t||"");
 function nuevoBloque(){
-  S.bloques.push({tipo:"", nota:"", hojas:[]});
+  S.bloques.push({tipo:"", nota:"", hojas:[], evs:[]});
   BQ=S.bloques.length-1; hojaSel=-1;
   renderBloques();
 }
 function quitarBloque(i){
   S.bloques[i].hojas.forEach(h=>URL.revokeObjectURL(h.url));
+  S.bloques[i].evs.forEach(h=>URL.revokeObjectURL(h.url));
   S.bloques.splice(i,1);
   if(!S.bloques.length) nuevoBloque();
   else { if(BQ>=S.bloques.length) BQ=S.bloques.length-1; hojaSel=-1; renderBloques(); }
@@ -1248,6 +1254,15 @@ function renderBloques(){
         '<button class="btn ghost bCambiar" type="button">📷 Cambiar</button></div>'+
         '</div>';
     }
+    // fotos de prenda: disponibles en cualquier proceso
+    const ne=b.evs.length;
+    html+='<label style="margin-top:12px">Fotos de prenda'+
+          (ne?' ('+ne+')':' <span style="font-weight:400;text-transform:none;letter-spacing:0">· opcional</span>')+
+          '</label>'+
+          '<div class="hojasgrid evs"></div>'+
+          '<div class="btnrow"><button class="btn ghost bPrenda" type="button">📷 '+
+          (ne?'Otra foto de prenda':'Agregar foto de prenda')+'</button>'+
+          (esTactil?'<button class="btn ghost bPrendaGal" type="button">🖼 Del celular</button>':'')+'</div>';
     html+='<label style="margin-top:12px">Comentario de este proceso</label>'+
           '<textarea class="txtNota" placeholder="Opcional…"></textarea>';
     d.innerHTML=html;
@@ -1281,6 +1296,19 @@ function renderBloques(){
     const bGi=d.querySelector(".bGirar"); if(bGi) bGi.onclick=()=>{ BQ=i; girarFoto(); };
     const vista=d.querySelector(".vista"); if(vista) zonaSoltar(vista, f=>{ BQ=i; hojaSel=-1; procesarHoja(f); });
     const bx=d.querySelector(".bx"); if(bx) bx.onclick=()=>{ if(confirm("¿Quitar este proceso y sus fotos?")) quitarBloque(i); };
+    const bPr=d.querySelector(".bPrenda");    if(bPr) bPr.onclick=()=>{ BQ=i; $("filePrenda").click(); };
+    const bPrG=d.querySelector(".bPrendaGal"); if(bPrG) bPrG.onclick=()=>{ BQ=i; $("filePrendaGal").click(); };
+    const ge=d.querySelector(".evs");
+    if(ge) b.evs.forEach((x,j)=>{
+      const c=document.createElement("div");
+      c.className="hcard";
+      c.innerHTML='<img src="'+x.url+'"><span class="n">P'+(j+1)+'</span><button class="x" type="button">✕</button>';
+      c.querySelector(".x").onclick=ev=>{
+        ev.stopPropagation();
+        URL.revokeObjectURL(x.url); b.evs.splice(j,1); renderBloques();
+      };
+      ge.appendChild(c);
+    });
 
     // miniaturas
     const g=d.querySelector(".mini");
@@ -1312,6 +1340,24 @@ $("fileHojaGal").addEventListener("change",e=>{
   const f=e.target.files&&e.target.files[0]; e.target.value="";
   if(f) procesarHoja(f);
 });
+["filePrenda","filePrendaGal"].forEach(id=>$(id).addEventListener("change",e=>{
+  const f=e.target.files&&e.target.files[0]; e.target.value="";
+  if(f) procesarPrenda(f);
+}));
+
+/* Las fotos de prenda van tal como se tomaron: solo se reducen y comprimen. */
+async function procesarPrenda(f){
+  showErr("");
+  spin(true,"Procesando foto…");
+  try{
+    const cv=await fileToCanvas(f,OUT_EV_MAX);
+    const blob=await toBlob(cv,Q_EV);
+    const thumb=await makeThumb(cv);
+    S.bloques[BQ].evs.push({blob,thumb,url:URL.createObjectURL(thumb),w:cv.width,h:cv.height});
+    renderBloques();
+  }catch(err){ showErr("No se pudo procesar la foto: "+err.message); }
+  spin(false);
+}
 window.addEventListener("paste",e=>{
   const f=soloImagen(e.clipboardData);
   if(!f) return;
@@ -1355,6 +1401,7 @@ async function girarFoto(){
 }
 /* ============ procesar la foto ============ */
 async function procesarHoja(f){
+  if(esDePrendas(S.bloques[BQ] && S.bloques[BQ].tipo)) return procesarPrenda(f);
   showErr("");
   spin(true,"Leyendo foto…");
   try{
@@ -1424,7 +1471,7 @@ function datosComunes(){
   };
 }
 /* Solo se envían los procesos que tengan al menos una foto. */
-function bloquesConFoto(){ return S.bloques.filter(b=>b.hojas.length); }
+function bloquesConFoto(){ return S.bloques.filter(b=>b.hojas.length || b.evs.length); }
 
 function validar(){
   const a=$("fAuditora");
@@ -1454,12 +1501,14 @@ $("btnGuardar").onclick=async()=>{
       const id="AUD-"+Date.now()+"-"+Math.random().toString(36).slice(2,7).toUpperCase();
       const meta=Object.assign({}, S.meta, {
         tipo:b.tipo||"", nota:(b.nota||"").trim(),
-        recorte:b.hojas.every(h=>h.det)?"AUTOMATICO":"MANUAL"
+        recorte:b.hojas.length ? (b.hojas.every(h=>h.det)?"AUTOMATICO":"MANUAL") : "SIN DOCUMENTO"
       });
       await dbPut({
         id, creado:new Date().toISOString(), estado:"PENDIENTE", intentos:0, error:"", meta,
         fotos:b.hojas.map((h,i)=>({tipo:"HOJA", desc:b.hojas.length>1?("Hoja "+(i+1)):"",
                                    blob:h.blob, thumb:h.thumb}))
+              .concat(b.evs.map((e,i)=>({tipo:"EVIDENCIA", desc:"Prenda "+(i+1),
+                                         blob:e.blob, thumb:e.thumb})))
       });
       histAgregar(meta);
       PEND_LOCAL.push({t:norm(meta.tipo),ta:norm(meta.taller),g:norm(meta.grupo),
@@ -1562,7 +1611,8 @@ $("btnLimpiar").onclick=async()=>{
 window.addEventListener("online",()=>enviarPendientes(true));
 
 function resetTodo(){
-  S.bloques.forEach(b=>b.hojas.forEach(h=>URL.revokeObjectURL(h.url)));
+  S.bloques.forEach(b=>{ b.hojas.forEach(h=>URL.revokeObjectURL(h.url));
+                         b.evs.forEach(h=>URL.revokeObjectURL(h.url)); });
   S.bloques=[]; S.hojaWarp=null; srcCv=null; S.detOk=false; hojaSel=-1; BQ=0;
   nuevoBloque();
   SEL=null; $("fBuscar").value="";
@@ -1611,7 +1661,7 @@ async function renderCola(){
       const a=document.createElement("a");
       a.href=URL.createObjectURL(src);
       a.download=[it.meta.grupo,it.meta.estilo,it.meta.color||"SC",f.tipo==="HOJA"?"HOJA":"PRENDA"+i].join("_")+".jpg";
-      a.textContent=(f.tipo==="HOJA"?"Hoja":"Prenda "+i)+(f.blob?"":" (mini)");
+      a.textContent=(f.tipo==="HOJA"?"Hoja":"Prenda")+(f.blob?"":" (mini)");
       a.target="_blank";
       links.appendChild(a);
     });
