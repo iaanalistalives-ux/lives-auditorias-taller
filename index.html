@@ -880,6 +880,12 @@ function houghQuad(pts,w,h,gray,pesos){
     for(let n=0;n<4;n++){const p=q[n],r=q[(n+1)%4];area+=p[0]*r[1]-r[0]*p[1];}
     area=Math.abs(area)/2;
     if(area<w*h*0.14) continue;
+    // Descarta tiras: ninguna hoja tiene forma de franja. Sin esto, en documentos
+    // con tablas densas el detector toma dos líneas internas por los bordes del papel
+    // y recorta una banda del centro (visto en producción: 1600x363).
+    const lado=(a,b)=>Math.hypot(q[a][0]-q[b][0],q[a][1]-q[b][1]);
+    const anchoQ=Math.max(lado(0,1),lado(3,2)), altoQ=Math.max(lado(0,3),lado(1,2));
+    if(Math.max(anchoQ,altoQ)/Math.max(1,Math.min(anchoQ,altoQ)) > 3.2) continue;
     // descarta el "quad" que es simplemente el marco completo de la foto:
     // significa que no se reconoció ningún papel, no que el papel llene la foto
     if(area>w*h*0.90){
