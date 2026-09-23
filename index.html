@@ -2,6 +2,279 @@
 <html lang="es-PE">
 <head>
 <meta charset="utf-8">
+<!-- ============================================================================
+     LIVES · SESIÓN DEL PORTAL EN LAS HERRAMIENTAS            lives-sesion v1 · 2026-09-18
+     Bloque común: es idéntico en todas las herramientas. Si se corrige, se corrige en
+     todas. No depende de nada de la página.
+     · Toma la sesión del portal (misma dirección github.io, se comparte sola). Dentro del
+       portal no se ve nada distinto.
+     · Si la herramienta se abre suelta y no hay sesión, pide usuario y clave aquí mismo,
+       con las mismas cuentas del portal. Esa sesión también sirve para el portal.
+     · Toda lectura a Supabase sale con la llave de la persona. Cuando Supabase deje de
+       aceptar lecturas anónimas (SQL 21), sin sesión no se lee nada.
+     · El nombre de quien trabaja sale de la sesión, no de la dirección: ?usuario= se
+       reescribe con el nombre real para que nadie pueda escribir otro.
+     · Renueva la llave antes de que venza (dura 1 hora) sin chocar con el portal ni con
+       otras pestañas.
+     ============================================================================ -->
+<style id="lsCss">
+#lsCapa{position:fixed;inset:0;z-index:2147483000;display:none;align-items:center;justify-content:center;
+  padding:18px;background:rgba(241,246,244,.97);font-family:Calibri,Arial,sans-serif;overflow:auto;}
+#lsCapa.ver{display:flex;}
+#lsCapa .lsCaja{width:100%;max-width:430px;background:#fff;border-radius:14px;overflow:hidden;
+  box-shadow:0 10px 30px rgba(14,59,54,.13);}
+#lsCapa .lsCab{background:#0E3B36;border-bottom:3px solid #10B981;padding:20px;display:flex;justify-content:center;}
+#lsCapa .lsCab img{height:34px;display:block;}
+#lsCapa .lsCuerpo{padding:24px 24px 22px;text-align:center;}
+#lsCapa .lsTit{font-size:19px;font-weight:800;color:#1a1a1a;margin-bottom:8px;}
+#lsCapa .lsSub{font-size:13.5px;color:#5F726C;margin-bottom:22px;line-height:1.5;}
+#lsCapa .lsBtn{display:inline-block;min-height:46px;background:#0F7A5A;color:#fff;border:none;border-radius:9px;
+  font-family:inherit;font-size:15px;font-weight:800;padding:13px 26px;text-decoration:none;line-height:20px;}
+#lsCapa .lsBtn:hover{background:#0B815E;}
+</style>
+<script id="lsJs">
+(function(){
+  'use strict';
+  if (window.LIVES_SESION) return;                       /* por si el bloque quedara dos veces */
+
+  var SB_URL  = 'https://xxfufpddgoyhbotjmaiy.supabase.co';
+  var SB_KEY  = 'sb_publishable_1g-n6UT70EUlNAo8Lyc04w_jKR4LpXZ';
+  /* Idénticos al portal (SBP_DOMINIO, SBP_PREFIJO) y a accesos_supabase. */
+  var DOMINIO = '@usuarios.lives.example.com';
+  var PREFIJO = 'Lives#';
+  var CLAVE   = 'lives_portal_sesion';                   /* misma llave que usa el portal */
+  var CANDADO = 'lives_sb_renovando';
+  var PORTAL  = 'https://iaanalistalives-ux.github.io/lives-portal/';
+  var MOVIL   = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent || '');
+  var GRACIA  = (MOVIL ? 720 : 60) * 60000;              /* igual que el portal */
+  var LOGO    = 'data:image/png;base64,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';
+  var fetchBase = window.fetch.bind(window);
+  var yo = Math.random().toString(36).slice(2);
+
+  /* ---------- guardar y leer la sesión (mismo formato que el portal) ---------- */
+  function leerJ(area, k){ try{ return JSON.parse(area.getItem(k) || 'null'); }catch(e){ return null; } }
+  function valida(d){
+    return !!(d && d.token && d.permisos && d.sb && d.sb.access && d.sb.refresh);
+  }
+
+  /* La sesión vigente. Si hay dos copias (la de esta pestaña y el respaldo común) y son
+     de la misma persona, se queda con la llave más nueva: otra pestaña o el portal pudo
+     renovarla, y usar una llave ya renovada cierra la sesión en Supabase. */
+  function sesion(){
+    var s = null, r = null;
+    try{ s = leerJ(sessionStorage, CLAVE); }catch(e){}
+    try{
+      var x = leerJ(localStorage, CLAVE + '_resp');
+      if (x && valida(x.d) && (Date.now() - x.ts) < GRACIA) r = x.d;
+    }catch(e){}
+    if (!valida(s)) s = null;
+    if (!s && r){ s = r; try{ sessionStorage.setItem(CLAVE, JSON.stringify(s)); }catch(e){} }
+    if (s && r && r.usuario === s.usuario && r.sb && (!s.sb || r.sb.exp > s.sb.exp)){
+      s.sb = r.sb;
+      try{ sessionStorage.setItem(CLAVE, JSON.stringify(s)); }catch(e){}
+    }
+    return s;
+  }
+  function guardar(d){
+    try{ sessionStorage.setItem(CLAVE, JSON.stringify(d)); }catch(e){}
+    try{ localStorage.setItem(CLAVE + '_resp', JSON.stringify({ d: d, ts: Date.now() })); }catch(e){}
+  }
+  function borrar(){
+    try{ sessionStorage.removeItem(CLAVE); }catch(e){}
+    try{ localStorage.removeItem(CLAVE + '_resp'); }catch(e){}
+  }
+  /* Mientras se usa la herramienta, el respaldo cuenta desde la última actividad. */
+  function refrescarMarca(){
+    var s = sesion(); if (!s) return;
+    try{ localStorage.setItem(CLAVE + '_resp', JSON.stringify({ d: s, ts: Date.now() })); }catch(e){}
+  }
+  setInterval(refrescarMarca, 60000);
+  document.addEventListener('visibilitychange', function(){ if (!document.hidden) refrescarMarca(); });
+
+  function equipo(){
+    var n = navigator.userAgent || '';
+    var so = /Android/i.test(n) ? 'Android' : /iPhone|iPad/i.test(n) ? 'iPhone/iPad'
+           : /Windows/i.test(n) ? 'Windows' : /Mac/i.test(n) ? 'Mac' : 'Otro';
+    return so + (window.top === window ? ' · suelta' : '');
+  }
+
+  function pedir(ruta, cuerpo, token, ms){
+    var ctl = (typeof AbortController !== 'undefined') ? new AbortController() : null;
+    var reloj = setTimeout(function(){ if (ctl) ctl.abort(); }, ms || 15000);
+    var cab = { 'Content-Type': 'application/json', apikey: SB_KEY };
+    if (token) cab.Authorization = 'Bearer ' + token;
+    return fetchBase(SB_URL + ruta, { method: 'POST', headers: cab, body: JSON.stringify(cuerpo || {}),
+                                      cache: 'no-store', signal: ctl ? ctl.signal : undefined })
+      .then(function(r){
+        clearTimeout(reloj);
+        return r.text().then(function(t){
+          var j = null; try{ j = t ? JSON.parse(t) : null; }catch(e){}
+          return { status: r.status, ok: r.ok, json: j };
+        });
+      }, function(e){ clearTimeout(reloj); throw e; });
+  }
+  function esperar(ms){ return new Promise(function(ok){ setTimeout(ok, ms); }); }
+
+  /* ---------- llave vigente, renovada sin chocar con otras pestañas ---------- */
+  var renovando = null;
+  function llave(forzar){
+    var s = sesion();
+    if (!s || !s.sb || !s.sb.refresh) return Promise.resolve(null);
+    if (!forzar && s.sb.exp - Date.now() > 60000) return Promise.resolve(s.sb.access);
+    if (renovando) return renovando;
+    var usada = s.sb.refresh;
+    renovando = (function intento(n){
+      var c = leerJ(localStorage, CANDADO);
+      if (c && c.hasta > Date.now() && c.quien !== yo && n < 4){
+        /* Otra pestaña o el portal está renovando: se espera y se usa lo que deje. */
+        return esperar(1500).then(function(){
+          var s2 = sesion();
+          if (s2 && s2.sb && s2.sb.refresh !== usada && s2.sb.exp - Date.now() > 60000) return s2.sb.access;
+          return intento(n + 1);
+        });
+      }
+      try{ localStorage.setItem(CANDADO, JSON.stringify({ quien: yo, hasta: Date.now() + 10000 })); }catch(e){}
+      return pedir('/auth/v1/token?grant_type=refresh_token', { refresh_token: usada })
+        .then(function(r){
+          if (r.ok && r.json && r.json.access_token){
+            var s3 = sesion() || s;
+            s3.sb = { access: r.json.access_token, refresh: r.json.refresh_token,
+                      exp: Date.now() + (Number(r.json.expires_in) || 3600) * 1000 };
+            guardar(s3);
+            return s3.sb.access;
+          }
+          /* Rechazada: puede que otra pestaña la haya renovado un instante antes. */
+          var s4 = sesion();
+          if (s4 && s4.sb && s4.sb.refresh !== usada && s4.sb.exp - Date.now() > 60000) return s4.sb.access;
+          if (r.status === 400 || r.status === 401 || r.status === 403) return null;   /* sesión cerrada */
+          return null;
+        }, function(){ return null; })                                             /* sin señal */
+        .then(function(tk){
+          try{ var c2 = leerJ(localStorage, CANDADO); if (c2 && c2.quien === yo) localStorage.removeItem(CANDADO); }catch(e){}
+          return tk;
+        });
+    })(0).then(function(tk){ renovando = null; return tk; }, function(){ renovando = null; return null; });
+    return renovando;
+  }
+
+  /* ---------- toda lectura a Supabase sale con la llave de la persona ---------- */
+  function conLlave(init, tk){
+    var o = {}, k;
+    init = init || {};
+    for (k in init) o[k] = init[k];
+    var h = {};
+    if (init.headers && typeof init.headers.forEach === 'function' && !(init.headers instanceof Array)){
+      init.headers.forEach(function(v, n){ h[n] = v; });
+    } else if (init.headers){
+      for (k in init.headers) h[k] = init.headers[k];
+    }
+    var tiene = false;
+    for (k in h) if (k.toLowerCase() === 'authorization') tiene = true;
+    if (!tiene && tk) h.Authorization = 'Bearer ' + tk;
+    var tieneKey = false;
+    for (k in h) if (k.toLowerCase() === 'apikey') tieneKey = true;
+    if (!tieneKey) h.apikey = SB_KEY;
+    o.headers = h;
+    return o;
+  }
+  window.fetch = function(entrada, init){
+    var url = (typeof entrada === 'string') ? entrada : '';
+    if (url.indexOf(SB_URL + '/rest/v1/') !== 0) return fetchBase(entrada, init);
+    return llave(false).then(function(tk){
+      return fetchBase(url, conLlave(init, tk)).then(function(r){
+        if (r.status !== 401) return r;
+        /* 401: la llave venció o la cerraron. Se renueva una vez y se reintenta. */
+        return llave(true).then(function(tk2){
+          if (!tk2){ pedirSesion(); return r; }
+          return fetchBase(url, conLlave(init, tk2)).then(function(r2){
+            if (r2.status === 401) pedirSesion();
+            return r2;
+          });
+        });
+      });
+    });
+  };
+
+  /* ---------- el nombre sale de la sesión, no de la dirección ---------- */
+  function fijarNombre(s){
+    if (!s || !s.nombre) return;
+    try{
+      var u = new URL(location.href);
+      if (u.searchParams.get('usuario') !== s.nombre){
+        u.searchParams.set('usuario', s.nombre);
+        u.searchParams.delete('nombre');
+        history.replaceState(history.state, '', u.toString());
+      }
+    }catch(e){}
+  }
+
+  /* ---------- aviso de "sin sesión" (21/09: sin formulario propio) ----------
+     El portal es la ÚNICA puerta. Esta herramienta nunca pide usuario ni clave: si
+     no hay sesión del portal (o quedó vieja/vencida), solo avisa y enlaza de vuelta
+     al portal. Entrar ahí es lo único que arregla esto — no hay nada que escribir
+     aquí. Esto es a propósito: evita que cada herramienta tenga su propia puerta
+     que pueda fallar o quedar desincronizada del portal. */
+  function capa(){
+    var c = document.getElementById('lsCapa');
+    if (c) return c;
+    c = document.createElement('div');
+    c.id = 'lsCapa';
+    c.setAttribute('role', 'dialog');
+    c.innerHTML =
+      '<div class="lsCaja"><div class="lsCab"><img alt="LIVES" src="' + LOGO + '"></div>' +
+      '<div class="lsCuerpo"><div class="lsTit" id="lsTit">Abre esto desde el portal</div>' +
+      '<div class="lsSub" id="lsSub">Esta herramienta no tiene su propia entrada. ' +
+      'Ve al portal LIVES e inicia sesión ahí; esta pantalla se abre sola en cuanto lo hagas.</div>' +
+      '<a class="lsBtn" href="' + PORTAL + '" target="_top">Ir al portal</a></div></div>';
+    document.body.appendChild(c);
+    return c;
+  }
+
+  var pidiendo = false;
+  function pedirSesion(){
+    if (pidiendo) return;
+    pidiendo = true;
+    function abrir(){ capa().classList.add('ver'); }
+    if (document.body) abrir(); else document.addEventListener('DOMContentLoaded', abrir);
+  }
+
+  /* ---------- al abrir ---------- */
+  var s0 = sesion();
+  if (!s0){
+    pedirSesion();
+  } else {
+    fijarNombre(s0);
+    /* Si alguien ejecutó cerrar_todas_las_sesiones(), esta sesión ya no vale. Sin señal
+       no se hace nada: nadie queda afuera por falta de conexión. */
+    pedir('/rest/v1/rpc/version_sesion', {}, null, 8000).then(function(v){
+      if (!v.ok || typeof v.json !== 'number') return;
+      var s = sesion(); if (!s) return;
+      if (s.vsesion === undefined || (s.vsesion !== null && s.vsesion !== v.json)){ borrar(); pedirSesion(); return; }
+      if (s.vsesion === null){ s.vsesion = v.json; guardar(s); }
+    }).catch(function(){});
+    /* Abierta fuera del portal: se anota igual que cuando se abre desde el portal. */
+    if (window.top === window && s0.sb){
+      document.addEventListener('DOMContentLoaded', function(){
+        llave(false).then(function(tk){
+          if (!tk) return;
+          return pedir('/rest/v1/rpc/registrar_apertura',
+            { p_herramienta: (document.title || location.pathname) + ' (suelta)',
+              p_url: location.origin + location.pathname, p_equipo: equipo() }, tk, 10000);
+        }).catch(function(){});
+      });
+    }
+  }
+
+  window.LIVES_SESION = {
+    version: 'lives-sesion v2 · 2026-09-21 (sin login propio, solo portal)',
+    actual: function(){ var s = sesion(); return s ? { usuario: s.usuario, nombre: s.nombre, conSupabase: !!s.sb } : null; },
+    llave: function(){ return llave(false); },
+    pedir: function(){ pedirSesion(); }
+  };
+})();
+</script>
+<!-- ===== fin lives-sesion v1 ===== -->
+<script>if (window.self !== window.top) document.documentElement.classList.add('embebido');</script>
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
 <title>Captura de Auditorías · LIVES</title>
 <style>
@@ -148,6 +421,8 @@ textarea{resize:vertical;min-height:56px;}
 @keyframes sp{to{transform:rotate(360deg);}}
 .toast{position:fixed;left:50%;transform:translateX(-50%);bottom:100px;background:#333;color:#fff;font-size:13px;font-weight:700;padding:11px 18px;border-radius:8px;z-index:98;opacity:0;transition:.25s;pointer-events:none;max-width:90%;text-align:center;}
 .toast.on{opacity:1;}
+html.embebido .header{display:none!important}
+html.embebido body{padding-top:0!important;margin-top:0!important}
 </style>
 </head>
 <body>
@@ -184,7 +459,6 @@ textarea{resize:vertical;min-height:56px;}
     <div id="boxAuditoraFija" class="hidden">
       <label>Auditora</label>
       <div class="derived" id="auditoraFija">—</div>
-      <button type="button" class="chip" id="btnOtraAuditora" style="margin-top:6px">No soy yo, cambiar</button>
     </div>
 
     <div class="rowf">
@@ -279,17 +553,80 @@ textarea{resize:vertical;min-height:56px;}
 
 <script>
 /* ==================================================================================
-   Las auditoras, talleres, tipos y clientes YA NO se editan aquí:
-   viven en el Google Sheet, en las hojas CAT_AUDITORAS, CAT_TALLERES,
-   CAT_TIPOS y CAT_CLIENTES. Se agregan o se dan de baja desde ahí.
-   Lo único configurable en este archivo es la URL de abajo.
+   Datos en Supabase (proyecto lives-datos). No hay claves en este archivo: todo se lee
+   y se guarda con la sesión del portal (bloque lives-sesion de arriba).
+   · Listas, OP y lo ya registrado: funciones fotos_inicio, fotos_ops, fotos_sugerencias.
+   · Fotos: almacén privado "fotos-taller", ruta AAAA/MM/<id>/<orden>.jpg.
+   · Registro: fotos_guardar (verifica que las fotos estén subidas y calcula el correlativo).
    ================================================================================== */
+const SB_URL = "https://xxfufpddgoyhbotjmaiy.supabase.co";
+const SB_KEY = "sb_publishable_1g-n6UT70EUlNAo8Lyc04w_jKR4LpXZ";
+const BUCKET = "fotos-taller";
+const APP_URL = SB_URL;           // siempre configurado (lo usan los avisos de la cola)
 
-const APP_URL = "https://script.google.com/macros/s/AKfycbxKQ7hwNGy4qoDG75MwqRM7fD4FjW-LtRUGn6eucmorrTxSWxhKgHMOjde0vDjNvDj7/exec";
+/* Llamada a una función de Supabase. Sin respaldo: si falla, se reintenta una vez y se
+   devuelve el error; la siguiente acción vuelve a intentar (nunca queda bloqueada). */
+async function rpc(nombre, cuerpo, ms){
+  let ultimo = {ok:false, error:"SIN_CONEXION"};
+  for(let intento=0; intento<2; intento++){
+    const ctl = new AbortController();
+    const reloj = setTimeout(()=>ctl.abort(), ms||20000);
+    try{
+      const r = await fetch(SB_URL+"/rest/v1/rpc/"+nombre, {
+        method:"POST", headers:{"Content-Type":"application/json"},
+        body:JSON.stringify(cuerpo||{}), signal:ctl.signal, cache:"no-store"
+      });
+      clearTimeout(reloj);
+      if(r.status===401 || r.status===403) return {ok:false, error:"SIN_SESION"};
+      const txt = await r.text();
+      let d = null; try{ d = txt ? JSON.parse(txt) : null; }catch(e){}
+      if(r.ok) return d;
+      ultimo = {ok:false, error:(d && (d.message||d.error)) || ("HTTP "+r.status)};
+      if(r.status < 500) return ultimo;          // error de datos: reintentar no sirve
+    }catch(e){
+      clearTimeout(reloj);
+      ultimo = {ok:false, error:"SIN_CONEXION"};
+    }
+  }
+  return ultimo;
+}
 
-/* Debe ser IGUAL a CLAVE_ENVIO del Code.gs. La auditora nunca la ve ni la escribe:
-   solo abre la app y envía. Si cambias la clave en el Sheet, cámbiala también aquí. */
-const CLAVE_ENVIO = "livessac";
+/* Sube una foto al almacén. Reintento = misma ruta (x-upsert): nunca duplica. */
+async function subirFoto(ruta, blob){
+  const tk = window.LIVES_SESION ? await window.LIVES_SESION.llave() : null;
+  if(!tk){ const e = new Error("SIN_SESION"); e.code = "SIN_SESION"; throw e; }
+  const ctl = new AbortController();
+  const reloj = setTimeout(()=>ctl.abort(), 90000);
+  try{
+    const r = await fetch(SB_URL+"/storage/v1/object/"+BUCKET+"/"+ruta, {
+      method:"POST", signal:ctl.signal,
+      headers:{Authorization:"Bearer "+tk, apikey:SB_KEY, "x-upsert":"true", "Content-Type":"image/jpeg"},
+      body:blob
+    });
+    if(r.status===401 || r.status===403){
+      const t = await r.text();
+      const e = new Error(/row-level|policy|Unauthorized/i.test(t) ? "SIN_PERMISO" : "SIN_SESION");
+      e.code = e.message; throw e;
+    }
+    if(!r.ok){ const t = await r.text(); throw new Error("Subida "+r.status+": "+t.slice(0,120)); }
+  } finally { clearTimeout(reloj); }
+}
+
+/* Lo que devuelve el servidor, dicho para la auditora. */
+const MENSAJES = {
+  SIN_SESION:"Sesión vencida: vuelve a entrar al portal y se enviará solo.",
+  SIN_PERMISO:"Tu usuario no tiene permiso para esta app. Avisa a Christian.",
+  NO_ES_AUDITORA:"Tu usuario del portal no figura como auditora activa. Avisa a Christian.",
+  AUDITORA_NO_EN_CATALOGO:"La auditora elegida no está en el catálogo.",
+  FOTOS_INCOMPLETAS:"Faltó subir alguna foto; se reintentará.",
+  SIN_FOTOS:"El registro no tiene fotos.",
+  ID_INVALIDO:"Identificador inválido.",
+  RUTA_AJENA:"Ruta de foto inválida.",
+  SIN_CONEXION:"Sin conexión: se enviará solo cuando vuelva la señal."
+};
+function mensaje(e){ return MENSAJES[e] || String(e||"Error desconocido"); }
+/* Errores que se arreglan solos al reintentar: el registro queda PENDIENTE, no ERROR. */
+const REINTENTABLES = ["SIN_SESION","SIN_CONEXION","FOTOS_INCOMPLETAS"];
 
 /* ================================================================================== */
 
@@ -332,47 +669,47 @@ function parseFechaInput(v){const m=/^(\d{4})-(\d{2})-(\d{2})$/.exec(v||"");retu
 function hoyISO(){const d=new Date();return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");}
 
 /* ============ formulario ============ */
-function fillSel(sel,arr,ph){
+function fillSel(sel,arr,ph,sinOtro){
   sel.innerHTML="";
   const o=document.createElement("option");o.value="";o.textContent=ph;sel.appendChild(o);
   arr.forEach(v=>{const x=document.createElement("option");x.value=v;x.textContent=v;sel.appendChild(x);});
+  if(sinOtro) return;
   const t=document.createElement("option");t.value="__OTRO__";t.textContent="OTRO (especificar)";sel.appendChild(t);
 }
 $("fFecha").value=hoyISO();
 
-/* ============ catálogos desde el Sheet ============ */
-const CK="lives_catalogos";
-/* El portal puede pasar quién ingresó: ...?auditora=FRIDA%20ESPINOZA
-   Si el nombre está en el catálogo, se fija y no se vuelve a preguntar. */
-const AUDITORA_URL = (()=>{
-  try{ return (new URLSearchParams(location.search).get("auditora")||"").trim().toUpperCase(); }
+/* ============ catálogos y usuario (desde Supabase) ============ */
+/* YO: quién entró al portal. auditora = su nombre en el catálogo (o null).
+   elige = puede elegir otra auditora (Athina y Christian, para papeles antiguos). */
+let YO = {usuario:"", nombre:"", auditora:null, elige:false};
+function usuarioSesion(){
+  try{ const a = window.LIVES_SESION && window.LIVES_SESION.actual(); return a ? String(a.usuario||"") : ""; }
   catch(e){ return ""; }
-})();
-let auditoraFijada=false;
-function fijarAuditora(){
-  if(!AUDITORA_URL || auditoraFijada) return;
-  const m=AUDITORAS.find(a=>a.trim().toUpperCase()===AUDITORA_URL);
-  if(!m) return;                      // nombre que no está en el catálogo: se elige a mano
-  $("fAuditora").value=m;
-  $("auditoraFija").textContent=m;
-  $("boxAuditora").classList.add("hidden");
-  $("boxAuditoraFija").classList.remove("hidden");
-  auditoraFijada=true;
 }
-$("btnOtraAuditora").onclick=()=>{
-  auditoraFijada=false;
-  $("boxAuditoraFija").classList.add("hidden");
-  $("boxAuditora").classList.remove("hidden");
-};
+const CK = "lives_fotos_cat_" + (usuarioSesion() || "anon");
+
+function pintarAuditora(){
+  if(YO.elige){
+    const prev = $("fAuditora").value;
+    fillSel($("fAuditora"), AUDITORAS, "— Elegir auditora —", true);
+    if(prev && AUDITORAS.includes(prev)) $("fAuditora").value = prev;
+    else if(YO.auditora && AUDITORAS.includes(YO.auditora)) $("fAuditora").value = YO.auditora;
+    $("boxAuditora").classList.remove("hidden");
+    $("boxAuditoraFija").classList.add("hidden");
+  } else {
+    $("auditoraFija").textContent = YO.auditora || (YO.nombre ? YO.nombre+" (no figura como auditora)" : "—");
+    $("auditoraFija").classList.toggle("none", !YO.auditora);
+    $("boxAuditora").classList.add("hidden");
+    $("boxAuditoraFija").classList.remove("hidden");
+  }
+}
+function auditoraActual(){ return YO.elige ? ($("fAuditora").value||"") : (YO.auditora||""); }
 
 function pintarCatalogos(){
-  const g=$("fAuditora").value, t=$("fTaller").value;
-  fillSel($("fAuditora"),AUDITORAS,"— Elegir auditora —");
+  const t=$("fTaller").value;
+  pintarAuditora();
   fillSel($("fTaller"),TALLERES,"— Elegir taller —");
-  if(g&&AUDITORAS.includes(g)) $("fAuditora").value=g;
   if(t&&TALLERES.includes(t))  $("fTaller").value=t;
-  // el tipo ya no es global: cada proceso tiene el suyo
-  fijarAuditora();
   refreshCliente();
   refreshProceso();
   // los tipos llegan después que se pintó el primer proceso: hay que rellenar sus listas
@@ -390,9 +727,13 @@ function refreshProceso(){
   else { el.textContent="Se calcula del taller"; el.classList.add("none"); }
 }
 function aplicarCatalogos(c){
+  YO = Object.assign({usuario:"", nombre:"", auditora:null, elige:false}, c.yo||{});
   AUDITORAS=c.auditoras||[]; TALLERES=c.talleres||[];
   TIPOS=c.tipos||[]; CLIENTES=c.clientes||{}; PROCESOS=c.procesos||{};
   pintarCatalogos();
+  if(!YO.elige && !YO.auditora)
+    showErr("Tu usuario del portal"+(YO.nombre?" ("+YO.nombre+")":"")+
+            " no figura como auditora activa en el catálogo. Avisa a Christian.");
 }
 function catalogosGuardados(){
   try{ const c=JSON.parse(localStorage.getItem(CK)||"null"); if(c) aplicarCatalogos(c); return !!c; }
@@ -400,27 +741,18 @@ function catalogosGuardados(){
 }
 async function cargarCatalogos(){
   const hab=catalogosGuardados();
-  if(!APP_URL){
-    if(!hab) showErr("Falta configurar la URL del servidor en este archivo (APP_URL).");
+  const d=await rpc("fotos_inicio");
+  if(!d || !d.ok){
+    const e=d&&d.error;
+    if(e==="SIN_PERMISO") showErr("Tu usuario no tiene permiso para esta app. Avisa a Christian.");
+    else if(e==="SIN_SESION") showErr(mensaje(e));
+    else if(!hab) showErr("No hay conexión y este celular todavía no tiene las listas. Conéctate una vez.");
     return;
   }
-  const k=claveEnvio();
-  try{
-    const r=await fetch(APP_URL+"?accion=catalogos&clave="+encodeURIComponent(k));
-    const d=await r.json();
-    if(!d.ok){
-      if(d.error==="CLAVE_INVALIDA")
-        showErr("La clave de esta app no coincide con la del servidor. Avisa a Christian.");
-      return;
-    }
-    localStorage.setItem(CK, JSON.stringify(d.catalogos));
-    aplicarCatalogos(d.catalogos);
-    showErr("");
-    if(!AUDITORAS.length || !TALLERES.length)
-      showErr("Las listas de auditoras o talleres están vacías en el Sheet. Avisa a Christian.");
-  }catch(e){
-    if(!hab) showErr("No hay señal y este celular todavía no tiene las listas. Conéctate una vez.");
-  }
+  try{ localStorage.setItem(CK, JSON.stringify(d)); }catch(e){}
+  showErr("");
+  aplicarCatalogos(d);
+  if(!TALLERES.length) showErr("La lista de talleres llegó vacía. Avisa a Christian.");
 }
 
 function otroHandler(sel,label){
@@ -436,7 +768,7 @@ function otroHandler(sel,label){
     sel.classList.remove("bad");
   });
 }
-otroHandler($("fAuditora"),"el nombre de la auditora");
+$("fAuditora").addEventListener("change",()=>$("fAuditora").classList.remove("bad"));
 otroHandler($("fTaller"),"el nombre del taller");
 $("fTaller").addEventListener("change",refreshProceso);
 
@@ -468,8 +800,8 @@ function refreshCliente(){
 $("fGrupo").addEventListener("input",refreshCliente);
 
 
-/* ============ maestro de OP (se lee del Sheet maestro, no se copia aquí) ============ */
-const OK_OPS="lives_ops";
+/* ============ maestro de OP (tabla ops de Supabase; se guarda en el celular) ============ */
+const OK_OPS="lives_fotos_ops";
 let OPS={}, TELAS={}, INDICE=[];
 /* Selección actual: {op, g, e, c, x, t}. No se escribe nada a mano: todo sale del maestro. */
 let SEL=null;
@@ -491,14 +823,10 @@ async function cargarOps(){
     const c=JSON.parse(localStorage.getItem(OK_OPS)||"null");
     if(c) aplicarOps(c.ops,c.telas);
   }catch(e){}
-  if(!APP_URL) return;
-  try{
-    const r=await fetch(APP_URL+"?accion=ops&clave="+encodeURIComponent(claveEnvio()));
-    const d=await r.json();
-    if(!d.ok) return;
-    localStorage.setItem(OK_OPS, JSON.stringify({ops:d.ops||{},telas:d.telas||{}}));
-    aplicarOps(d.ops||{}, d.telas||{});
-  }catch(e){ /* sin señal: se usa lo guardado */ }
+  const d=await rpc("fotos_ops",{},45000);
+  if(!d || !d.ok) return;                        // sin señal: se usa lo guardado
+  try{ localStorage.setItem(OK_OPS, JSON.stringify({ops:d.ops||{},telas:d.telas||{}})); }catch(e){}
+  aplicarOps(d.ops||{}, d.telas||{});
 }
 
 function colorActual(){ return SEL ? SEL.c : ""; }
@@ -592,19 +920,15 @@ $("btnLimpiarSel").onclick=()=>{ SEL=null; $("fBuscar").value=""; pintarSeleccio
 })();
 
 /* ============ lo ya registrado en el sistema (viene del servidor) ============ */
-const SK="lives_sugerencias";
+const SK="lives_fotos_sugerencias";
 let REG=[];                       // [[TIPO,TALLER,GRUPO,ESTILO,COLOR], ...]
 function aplicarReg(f){ REG=Array.isArray(f)?f:[]; refreshRep(); }
 async function cargarSugerencias(){
   try{ const c=JSON.parse(localStorage.getItem(SK)||"null"); if(c) aplicarReg(c); }catch(e){}
-  if(!APP_URL) return;
-  try{
-    const r=await fetch(APP_URL+"?accion=sugerencias&clave="+encodeURIComponent(claveEnvio()));
-    const d=await r.json();
-    if(!d.ok) return;
-    localStorage.setItem(SK, JSON.stringify(d.filas||[]));
-    aplicarReg(d.filas||[]);
-  }catch(e){ /* sin señal: se usa lo guardado */ }
+  const d=await rpc("fotos_sugerencias");
+  if(!d || !d.ok) return;                        // sin señal: se usa lo guardado
+  try{ localStorage.setItem(SK, JSON.stringify(d.filas||[])); }catch(e){}
+  aplicarReg(d.filas||[]);
 }
 const norm=v=>String(v==null?"":v).trim().toUpperCase();
 
@@ -1468,7 +1792,7 @@ function datosComunes(){
   const hh=String(ahora.getHours()).padStart(2,"0")+":"+String(ahora.getMinutes()).padStart(2,"0");
   return {
     fecha:$("fFecha").value, hora:hh, semana:w.sem, anio_semana:w.anio,
-    auditora:$("fAuditora").value, taller:$("fTaller").value,
+    auditora:auditoraActual(), taller:$("fTaller").value,
     proceso_taller:PROCESOS[$("fTaller").value]||"",
     op:$("fOP").value.trim().toUpperCase(),
     grupo:g, cliente:(clienteDe(g)||{}).cliente||"", estilo:$("fEstilo").value.trim().toUpperCase(),
@@ -1480,14 +1804,21 @@ function datosComunes(){
 function bloquesConFoto(){ return S.bloques.filter(b=>b.hojas.length || b.evs.length); }
 
 function validar(){
-  const a=$("fAuditora");
-  if(!(a.value||"").trim() || a.value==="__OTRO__"){
-    a.classList.add("bad");
-    showErr("Falta completar: Auditora.");
-    a.scrollIntoView({behavior:"smooth",block:"center"});
+  if(!auditoraActual()){
+    if(YO.elige){
+      const a=$("fAuditora");
+      a.classList.add("bad");
+      showErr("Falta completar: Auditora.");
+      a.scrollIntoView({behavior:"smooth",block:"center"});
+    } else {
+      showErr(YO.usuario || YO.nombre
+        ? "Tu usuario del portal no figura como auditora activa en el catálogo. Avisa a Christian."
+        : "Todavía no se cargaron tus datos. Revisa la señal y vuelve a intentar.");
+      if(!YO.usuario) cargarCatalogos();
+    }
     return false;
   }
-  a.classList.remove("bad");
+  $("fAuditora").classList.remove("bad");
   if(!bloquesConFoto().length){
     showErr("Falta la foto de al menos un proceso.");
     return false;
@@ -1524,14 +1855,12 @@ $("btnGuardar").onclick=async()=>{
       ids.push(id);
       await new Promise(r=>setTimeout(r,2));   // ids distintos aunque vaya rapidísimo
     }
-    cargarOps();
     resetTodo();
     await renderCola();
   }catch(err){ spin(false); showErr("No se pudo guardar en el celular: "+err.message); return; }
 
   spin(false);
   window.scrollTo({top:0,behavior:"smooth"});
-  if(!APP_URL){ toast("✓ Guardado en el celular (envío no configurado)"); return; }
   toast(ids.length>1 ? ("✓ "+ids.length+" procesos guardados · enviando…")
                      : "✓ Guardado · enviando a planta…");
   (async()=>{
@@ -1541,54 +1870,61 @@ $("btnGuardar").onclick=async()=>{
     if(ok===ids.length){
       PEND_LOCAL=[]; cargarSugerencias();
       toast(ids.length>1 ? ("✓ "+ok+" procesos enviados") : "✓ Enviado a planta");
-    } else toast("Sin señal: se enviará solo cuando vuelva.");
+    } else toast("No se pudo enviar todo: queda en Envíos y se reintenta solo.");
   })();
 };
 
-/* ============ envío al servidor ============ */
-function claveEnvio(){ return CLAVE_ENVIO; }
-function blobB64(b){
-  return new Promise((res,rej)=>{
-    const r=new FileReader();
-    r.onload=()=>res(String(r.result).split(",")[1]);
-    r.onerror=()=>rej(new Error("No se pudo leer la foto"));
-    r.readAsDataURL(b);
-  });
+/* ============ envío a Supabase ============ */
+/* 1) sube cada foto (y su miniatura) al almacén en AAAA/MM/<id>/<orden>.jpg
+   2) recién entonces registra con fotos_guardar.
+   Si algo falla a mitad, el reintento sube a las mismas rutas (reemplaza) y el servidor
+   no duplica el registro: se puede reintentar sin miedo. */
+function slug(v){ return String(v||"").toUpperCase().replace(/[^A-Z0-9]+/g,"-").replace(/^-|-$/g,""); }
+function nombreFoto(m, f, nH, nE){
+  return [m.op||m.grupo, m.estilo, m.color||"SC", slug(m.tipo).slice(0,18),
+          f.tipo==="HOJA" ? "HOJA"+nH : "PRENDA"+nE]
+         .map(x=>String(x||"").replace(/[^A-Za-z0-9\-]/g,"")).join("_")+".jpg";
 }
 async function enviarUno(id){
   const items=await dbAll();
   const it=items.find(x=>x.id===id);
   if(!it || it.estado==="ENVIADO") return {ok:true};
-  const clave=claveEnvio();
-  if(!clave) return {ok:false,error:"SIN_CLAVE"};
   try{
-    const fotos=[];
-    for(const f of it.fotos){
-      fotos.push({tipo:f.tipo, desc:f.desc||"",
-                  b64:await blobB64(f.blob),
-                  thumb:f.thumb?await blobB64(f.thumb):""});
+    const fe=/^\d{4}-\d{2}/.test(it.meta.fecha||"") ? it.meta.fecha : hoyISO();
+    const base=fe.slice(0,4)+"/"+fe.slice(5,7)+"/"+it.id+"/";
+    const fotos=[]; let nH=0, nE=0;
+    for(let i=0;i<it.fotos.length;i++){
+      const f=it.fotos[i];
+      if(!f.blob) throw new Error("La foto "+(i+1)+" ya no está en este celular");
+      if(f.tipo==="HOJA") nH++; else nE++;
+      const ruta=base+i+".jpg";
+      await subirFoto(ruta, f.blob);
+      let rutaMini="";
+      if(f.thumb){ rutaMini=base+i+"_t.jpg"; await subirFoto(rutaMini, f.thumb); }
+      fotos.push({tipo:f.tipo, desc:f.desc||"", ruta, ruta_mini:rutaMini,
+                  nombre:nombreFoto(it.meta,f,nH,nE), kb:Math.round(f.blob.size/1024)});
     }
-    const resp=await fetch(APP_URL,{
-      method:"POST",
-      headers:{"Content-Type":"text/plain;charset=utf-8"},
-      body:JSON.stringify({clave, id:it.id, creado:it.creado, meta:it.meta, fotos})
-    });
-    const data=await resp.json();
-    if(!data.ok){
-      it.estado="ERROR"; it.error=data.error||"desconocido"; it.intentos=(it.intentos||0)+1;
+    const d=await rpc("fotos_guardar",{p_id:it.id, p_creado:it.creado, p_meta:it.meta, p_fotos:fotos},60000);
+    if(!d || !d.ok){
+      const e=(d&&d.error)||"desconocido";
+      it.estado = REINTENTABLES.includes(e) ? "PENDIENTE" : "ERROR";
+      it.error = mensaje(e); it.intentos=(it.intentos||0)+1;
       await dbPut(it);
-      return {ok:false,error:data.error};
+      return {ok:false, error:e};
     }
     // enviada: se sueltan las fotos grandes y se conservan las miniaturas
     it.estado="ENVIADO"; it.error=""; it.enviado=new Date().toISOString();
-    it.repeticion=data.repeticion||1;
+    it.repeticion=d.repeticion||1;
     it.fotos=it.fotos.map(f=>({tipo:f.tipo,desc:f.desc,thumb:f.thumb}));
     await dbPut(it);
-    return {ok:true, repeticion:data.repeticion};
+    return {ok:true, repeticion:d.repeticion};
   }catch(err){
-    it.estado="PENDIENTE"; it.error=String(err.message||err); it.intentos=(it.intentos||0)+1;
+    const code = err.code || (err.name==="AbortError" || /fetch|network|Failed/i.test(String(err.message)) ? "SIN_CONEXION" : "");
+    it.estado = (code==="SIN_PERMISO") ? "ERROR" : "PENDIENTE";
+    it.error = code ? mensaje(code) : String(err.message||err);
+    it.intentos=(it.intentos||0)+1;
     await dbPut(it);
-    return {ok:false,error:it.error};
+    return {ok:false, error:code||it.error};
   }
 }
 async function enviarPendientes(silencioso){
@@ -1601,7 +1937,7 @@ async function enviarPendientes(silencioso){
     let ok=0;
     for(const it of items){
       const r=await enviarUno(it.id);
-      if(r.ok) ok++; else if(r.error==="SIN_CLAVE") break;
+      if(r.ok) ok++; else if(r.error==="SIN_SESION" || r.error==="SIN_CONEXION") break;
     }
     await renderCola();
     if(!silencioso){ spin(false); toast(ok+" de "+items.length+" enviadas"); }
