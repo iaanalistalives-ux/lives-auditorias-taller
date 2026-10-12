@@ -531,6 +531,7 @@ textarea{resize:vertical;min-height:56px;}
 .mfoot .btn.ghost{background:transparent;border-color:rgba(255,255,255,.35);color:#fff;}
 
 /* cola */
+.lsTope500{font-size:12px;color:#5F726C;text-align:center;padding:8px 0}
 .qitem{background:#fff;border:1px solid var(--warm);border-left:4px solid var(--tan);border-radius:8px;padding:11px 13px;margin-bottom:9px;}
 .qitem .qt{font-weight:700;font-size:13.5px;}
 .qitem .qs{font-size:11.5px;color:var(--stone);margin-top:2px;}
@@ -2105,7 +2106,10 @@ async function renderCola(){
   $("qActions").style.display = APP_URL ? "flex" : "none";
   if(!items.length){ $("qList").innerHTML='<div class="empty">Todavía no hay envíos.</div>'; return; }
   const box=$("qList"); box.innerHTML="";
-  items.forEach(it=>{
+  /* Regla 500 (12/10/2026): se dibujan los 500 envíos más recientes; los pendientes o con
+     error se dibujan siempre, aunque sean más antiguos (no se pueden perder de vista). */
+  const ver=items.filter((x,i)=>i<500 || x.estado!=="ENVIADO");
+  ver.forEach(it=>{
     const env=it.estado==="ENVIADO";
     const kb=it.fotos.reduce((a,f)=>a+((f.blob&&f.blob.size)||(f.thumb&&f.thumb.size)||0),0)/1024;
     const d=document.createElement("div");
@@ -2155,6 +2159,11 @@ async function renderCola(){
     links.appendChild(del);
     box.appendChild(d);
   });
+  if(ver.length<items.length){
+    const t=document.createElement("div"); t.className="lsTope500";
+    t.textContent="Se muestran los 500 registros más recientes de "+items.length.toLocaleString("es-PE")+".";
+    box.appendChild(t);
+  }
 }
 cargarCatalogos();
 renderCola().then(()=>enviarPendientes(true));
