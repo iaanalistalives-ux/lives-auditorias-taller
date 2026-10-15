@@ -735,6 +735,22 @@ textarea{resize:vertical;min-height:56px;}
 .mfoot{padding:11px 14px calc(11px + env(safe-area-inset-bottom));display:flex;gap:9px;background:#0b1d1b;border-top:1px solid rgba(255,255,255,.14);}
 .mfoot .btn.ghost{background:transparent;border-color:rgba(255,255,255,.35);color:#fff;}
 
+/* corregir OP y color de un envío (15/10/2026) */
+.cmodal{display:none;position:fixed;inset:0;z-index:85;background:rgba(14,59,54,.45);align-items:center;justify-content:center;padding:14px;}
+.cmodal.on{display:flex;}
+.cbox2{background:#fff;border-radius:10px;width:100%;max-width:520px;max-height:100%;overflow:auto;padding:16px;box-shadow:0 10px 30px rgba(0,0,0,.25);}
+.cbox2 .ct{font-weight:700;font-size:15px;color:var(--petrol);display:flex;align-items:center;gap:8px;}
+.cbox2 .ct .x{margin-left:auto;background:#fff;border:1px solid var(--warm);border-radius:6px;padding:4px 10px;font-weight:700;color:var(--stone);cursor:pointer;font-family:inherit;}
+.cbox2 .cact{font-size:12.5px;color:var(--stone);margin-top:4px;}
+.cops,.ccols{display:flex;flex-wrap:wrap;gap:7px;margin-top:8px;}
+.cops button,.ccols button{background:#fff;border:1.5px solid var(--warm);border-radius:8px;padding:9px 12px;font-family:inherit;font-size:14px;font-weight:700;color:var(--sage);cursor:pointer;text-align:left;}
+.ccols button{width:100%;}
+.ccols button small{display:block;font-weight:400;font-size:11.5px;color:var(--stone);}
+.cops button.on,.ccols button.on{border-color:var(--sage);background:#E6F6EF;}
+.ccols button.actual{opacity:.55;}
+.cmsg{font-size:12.5px;margin-top:8px;color:var(--stone);}
+.cmsg.err{display:block;color:var(--rose);background:none;border:none;padding:0;}
+
 /* cola */
 .lsTope500{font-size:12px;color:#5F726C;text-align:center;padding:8px 0}
 .qitem{background:#fff;border:1px solid var(--warm);border-left:4px solid var(--tan);border-radius:8px;padding:11px 13px;margin-bottom:9px;}
@@ -873,6 +889,24 @@ html.embebido body{padding-top:0!important;margin-top:0!important}
     <button class="btn ghost" id="mCancel" type="button">Cancelar</button>
     <button class="btn ghost" id="mFull" type="button">Toda la foto</button>
     <button class="btn" id="mApply" type="button">Aplicar ✓</button>
+  </div>
+</div>
+
+<!-- ===== CORREGIR OP Y COLOR DE UN ENVÍO ===== -->
+<div class="cmodal" id="cModal" role="dialog" aria-modal="true">
+  <div class="cbox2">
+    <div class="ct">Corregir OP y color <button class="x" id="cCerrar" type="button">✕ Cerrar</button></div>
+    <div class="cact" id="cActual"></div>
+    <label>OP correcta</label>
+    <input type="text" id="cOP" inputmode="numeric" autocomplete="off" placeholder="Escribe la OP">
+    <div class="cops" id="cOps"></div>
+    <label id="cColLbl" style="display:none">Elige el color</label>
+    <div class="ccols" id="cCols"></div>
+    <div class="cmsg" id="cMsg"></div>
+    <div class="btnrow">
+      <button class="btn ghost" id="cCancel" type="button">Cancelar</button>
+      <button class="btn" id="cGuardar" type="button" disabled>Guardar corrección</button>
+    </div>
   </div>
 </div>
 
@@ -2352,6 +2386,10 @@ async function renderCola(){
       rt.onclick=async ev=>{ev.preventDefault();spin(true,"Enviando…");const r=await enviarUno(it.id);spin(false);await renderCola();toast(r.ok?"✓ Enviada":"No se pudo enviar");};
       links.appendChild(rt);
     }
+    const cor=document.createElement("a");
+    cor.href="#"; cor.textContent="✏️ Corregir";
+    cor.onclick=ev=>{ev.preventDefault(); abrirCorregir(it);};
+    links.appendChild(cor);
     const del=document.createElement("a");
     del.href="#"; del.textContent="🗑 Borrar";
     del.style.color="#DC2626"; del.style.borderColor="#DC2626";
@@ -2370,6 +2408,87 @@ async function renderCola(){
     box.appendChild(t);
   }
 }
+/* ============ corregir OP y color de un envío (15/10/2026) ============
+   Se elige la OP correcta y uno de sus colores del maestro de OPs (nada a mano).
+   Enviado: lo corrige la base (fotos_corregir) y rehace el correlativo.
+   Pendiente: se corrige solo en el celular, antes de enviarse. */
+const COR={it:null, op:"", v:null};
+function corMsg(t,err){ const m=$("cMsg"); m.textContent=t||""; m.className="cmsg"+(err?" err":""); }
+function corCerrar(){ $("cModal").classList.remove("on"); COR.it=null; }
+function corPintarOps(){
+  const q=$("cOP").value.trim().toUpperCase();
+  const box=$("cOps"); box.innerHTML="";
+  if(!q){ return; }
+  const l=Object.keys(OPS).filter(o=>o.startsWith(q)).sort().slice(0,8);
+  if(!l.length){ box.innerHTML='<span class="cmsg">Esa OP no está en el maestro.</span>'; return; }
+  l.forEach(o=>{
+    const b=document.createElement("button"); b.type="button";
+    b.textContent=o+(OPS[o].g?" · "+OPS[o].g:""); if(o===COR.op) b.className="on";
+    b.onclick=()=>{ COR.op=o; COR.v=null; corPintarOps(); corPintarCols(); };
+    box.appendChild(b);
+  });
+  if(l.length===1 && l[0]===q && COR.op!==q){ COR.op=q; COR.v=null; corPintarOps(); corPintarCols(); }
+}
+function corPintarCols(){
+  const box=$("cCols"); box.innerHTML="";
+  const d=OPS[COR.op];
+  $("cColLbl").style.display=d?"block":"none";
+  $("cGuardar").disabled=true; corMsg("");
+  if(!d) return;
+  const m=COR.it.meta;
+  (d.v||[]).forEach(v=>{
+    const actual=norm(COR.op)===norm(m.op)&&norm(v[0])===norm(m.estilo)&&norm(v[1])===norm(m.color);
+    const b=document.createElement("button"); b.type="button";
+    b.innerHTML=esc(v[1]||"(sin color)")+'<small>Estilo '+esc(v[0])+(actual?" · es el que tiene ahora":"")+'</small>';
+    if(actual) b.classList.add("actual");
+    if(COR.v===v) b.classList.add("on");
+    b.onclick=()=>{ if(actual) return; COR.v=v; corPintarCols(); $("cGuardar").disabled=false; };
+    box.appendChild(b);
+  });
+}
+function abrirCorregir(it){
+  if(!Object.keys(OPS).length){ toast("Todavía se están cargando las OPs. Intenta en un momento."); cargarOps(); return; }
+  COR.it=it; COR.op=""; COR.v=null;
+  const m=it.meta;
+  $("cActual").textContent="Ahora: "+[m.op,m.grupo,m.estilo,m.color].filter(x=>x&&String(x).trim()).join(" · ")+
+                           (m.tipo?" — "+m.tipo:"");
+  $("cOP").value=m.op||""; $("cOps").innerHTML=""; $("cCols").innerHTML="";
+  $("cColLbl").style.display="none"; $("cGuardar").disabled=true; corMsg("");
+  $("cModal").classList.add("on");
+  corPintarOps();
+}
+$("cOP").addEventListener("input",()=>{ COR.op=""; COR.v=null; $("cCols").innerHTML=""; $("cColLbl").style.display="none"; $("cGuardar").disabled=true; corPintarOps(); });
+$("cCerrar").onclick=corCerrar; $("cCancel").onclick=corCerrar;
+$("cModal").addEventListener("click",ev=>{ if(ev.target.id==="cModal") corCerrar(); });
+$("cGuardar").onclick=async()=>{
+  const it=COR.it, v=COR.v; if(!it||!v) return;
+  const g=(OPS[COR.op]||{}).g||"";
+  const cli=(clienteDe(g)||{}).cliente||"";
+  const nuevo={op:COR.op, grupo:g, estilo:v[0]||"", color:v[1]||"", cliente:cli,
+               estilo_cliente:v[2]||"", cod_tela:v[3]||"", desc_tela:TELAS[v[3]]||""};
+  const items=await dbAll(); const act=items.find(x=>x.id===it.id);
+  if(!act){ corMsg("Este envío ya no está en el celular.",true); return; }
+  $("cGuardar").disabled=true;
+  if(act.estado!=="ENVIADO"){
+    Object.assign(act.meta,nuevo); await dbPut(act);
+    corCerrar(); await renderCola(); toast("✓ Corregido · se enviará con el color correcto");
+    return;
+  }
+  spin(true,"Corrigiendo…");
+  const d=await rpc("fotos_corregir",{p_id:act.id,p_op:nuevo.op,p_estilo:nuevo.estilo,p_color:nuevo.color,p_cliente:cli},30000);
+  spin(false);
+  if(!d || !d.ok){
+    const e=(d&&d.error)||"SIN_CONEXION";
+    const txt={NO_ES_TUYO:"Solo quien registró este envío puede corregirlo.",
+               NO_EN_MAESTRO:"Esa OP y color no están en el maestro de OPs.",
+               NO_EXISTE:"Este envío no está en planta."}[e] || mensaje(e);
+    corMsg("No se corrigió: "+txt,true); $("cGuardar").disabled=false; return;
+  }
+  Object.assign(act.meta,nuevo); act.repeticion=d.repeticion||act.repeticion; await dbPut(act);
+  corCerrar(); await renderCola(); cargarSugerencias();
+  toast("✓ Corregido en planta");
+};
+
 cargarCatalogos();
 renderCola().then(()=>enviarPendientes(true));
 </script>
