@@ -1206,6 +1206,7 @@ function pintarSeleccion(){
     el.textContent = val || "—";
     el.classList.toggle("none", !val);
   };
+  if(SEL) $("fBuscar").classList.remove("bad");
   $("fOP").value     = SEL ? SEL.op : "";
   $("fGrupo").value  = SEL ? SEL.g  : "";
   $("fEstilo").value = SEL ? SEL.e  : "";
@@ -1913,6 +1914,7 @@ function quitarBloque(i){
   if(!S.bloques.length) nuevoBloque();
   else { if(BQ>=S.bloques.length) BQ=S.bloques.length-1; hojaSel=-1; renderBloques(); }
 }
+["fFecha","fTaller"].forEach(id=>$(id).addEventListener("change",()=>$(id).classList.remove("bad")));
 $("btnAgregarProceso").onclick=()=>{ nuevoBloque(); $("bloques").lastElementChild.scrollIntoView({behavior:"smooth",block:"center"}); };
 
 
@@ -2186,8 +2188,27 @@ function validar(){
     return false;
   }
   $("fAuditora").classList.remove("bad");
-  if(!bloquesConFoto().length){
-    showErr("Falta la foto de al menos un proceso.");
+  /* 19/10/2026 (Christian): no se guarda sin los datos de arriba ni sin el tipo de
+     proceso de cada foto. Antes se podía enviar sin tipo (32 registros desde julio) y
+     el registro quedaba suelto, contado aparte de su proceso. */
+  const faltan=[]; let primero=null;
+  const marca=(el,ok)=>{ if(!el) return; el.classList.toggle("bad",!ok); if(!ok&&!primero) primero=el; };
+  const fe=$("fFecha"), ta=$("fTaller"), bu=$("fBuscar");
+  marca(fe, !!fe.value);                         if(!fe.value) faltan.push("Fecha");
+  marca(ta, !!ta.value);                         if(!ta.value) faltan.push("Taller");
+  const opOk=!!($("fOP").value.trim() && colorActual());
+  marca(bu, opOk);                               if(!opOk) faltan.push("OP (escríbela y elígela de la lista)");
+  if(!bloquesConFoto().length) faltan.push("la foto de al menos un proceso");
+  bloquesConFoto().forEach(b=>{
+    if(String(b.tipo||"").trim()) return;
+    const i=S.bloques.indexOf(b);
+    const sel=$("bloques").children[i] && $("bloques").children[i].querySelector(".selTipo");
+    marca(sel,false);
+    faltan.push("Tipo de documento del Proceso "+(i+1));
+  });
+  if(faltan.length){
+    showErr("Falta completar: "+faltan.join(", ")+".");
+    if(primero) setTimeout(()=>primero.scrollIntoView({behavior:"smooth",block:"center"}),350);
     return false;
   }
   S.meta=datosComunes();
